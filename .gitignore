@@ -135,3 +135,20 @@ session/*.json
 questions.*
 export/*
 faces/*
+
+# Go binaries and artifacts
+*.exe
+*.exe~
+*.dll
+*.dylib
+*.test
+*.out
+vendor/
+go.work
+/cpass
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

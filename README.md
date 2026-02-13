@@ -12,6 +12,21 @@
 
 <span style="color: red"><b>Ps: 本项目不提供任何题库资源，有相关测试需求者请按照文档自行解决。本项目仅供学习参考使用，请在下载部署后 24 小时内删除，由于使用本项目不当所造成的挂科或不良学习记录作者一概不负责。</b></span>
 
+# 🎉 Go 语言重构版本
+
+> **本项目已使用 Go 语言完成重构！**
+>
+> ✨ **优势**：
+> - 🚀 **更高性能**：Go 的并发模型和编译优化带来更快的执行速度
+> - 📦 **更小体积**：单个可执行文件，无需运行时依赖，体积仅 10-20MB
+> - 🔧 **更易部署**：无需安装 Python、Poetry 或任何依赖库
+> - 🌍 **跨平台**：轻松编译为 Linux、Windows、macOS 等平台的原生程序
+> - 💪 **类型安全**：编译时类型检查，减少运行时错误
+>
+> Python 版本代码仍然保留，供学习和参考使用。
+>
+> 查看 [Go 版本构建说明](#-go-版本构建推荐)
+
 # notice
 
 重要通知：项目**归档**，新项目将在**不久后回归**
@@ -74,7 +89,73 @@
 
 ## 🚀Build
 
-### 💻本地化构建项目
+> **重要更新**: 本项目已使用 **Go 语言重构**！Go 版本提供更好的性能、更小的二进制文件和更简单的部署。Python 版本代码仍然保留供参考。
+
+### 🔥 Go 版本构建（推荐）
+
+#### 前置要求
+
+- Go 版本 >= 1.21
+
+#### 本地构建
+
+clone 项目到本地，并构建
+
+```bash
+git clone 'https://github.com/theshdowaura/cpass'
+cd cpass
+make build
+```
+
+或者直接使用 go 命令：
+
+```bash
+go build -o cpass ./cmd/cpass
+```
+
+运行主程序
+
+```bash
+./cpass
+```
+
+#### 跨平台编译
+
+构建多平台可执行文件：
+
+```bash
+make build-all
+```
+
+这将生成以下平台的二进制文件：
+- `cpass-linux-amd64` - Linux (x86_64)
+- `cpass-linux-arm64` - Linux (ARM64)
+- `cpass-windows-amd64.exe` - Windows (x86_64)
+- `cpass-darwin-amd64` - macOS (Intel)
+- `cpass-darwin-arm64` - macOS (Apple Silicon)
+
+#### 使用 Docker 构建 Go 版本
+
+从源码构建镜像：
+
+```bash
+docker build -f Dockerfile.go -t cpass:go .
+```
+
+运行容器：
+
+```bash
+docker run -it \
+  --name cpass \
+  -v "$PWD/session:/app/session" \
+  -v "$PWD/export:/app/export" \
+  -v "$PWD/logs:/app/logs" \
+  -v "$PWD/faces:/app/faces" \
+  -v "$PWD/config.yml:/app/config.yml" \
+  cpass:go
+```
+
+### 💻Python 版本构建（旧版）
 
 使用 Python 版本 >= 3.10.0
 
@@ -92,7 +173,7 @@ poetry install
 poetry run python3 main.py
 ```
 
-### 🐋使用  Docker  构建项目
+### 🐋使用  Docker  构建 Python 版本
 
 从 DockerHub 拉取最新镜像
 
