@@ -206,17 +206,23 @@ cargo run -p cpass-cli -- --fixture-dir fixtures/legacy_run_document run --cours
 
 If you prefer to start from the binary directly, invoking `cpass` with no subcommand now launches
 the top-level interactive orchestrator. It shows the banner, resolves a saved session (or prompts
-for password login or QR login when no session exists), prints the current account summary, lists
-available courses, accepts course index / name / `course_id` selectors, and then drops into the
-same TUI-backed run path for supported course execution:
+for password login or QR login when no session exists), lists available courses, accepts course
+index / name / `course_id` selectors, and then drops into the same TUI-backed run path for
+supported course execution:
 
 ```bash
 cargo run -p cpass-cli --
 ```
 
-The launcher already recognizes the original `EXAM|...` selector prefix, but the Rust-side
-interactive exam orchestrator is not implemented yet. For now that branch fails closed and users
-should keep using the explicit `cpass exam ...` subcommands for read-only exam workflows.
+The launcher also supports the legacy `EXAM|...` selector prefix in a read-only form. After the
+course selector resolves, it shows the course exam list and accepts:
+
+- exam index → render the same safe `exam show` snapshot inline
+- `e<index>` → export the same safe `exam preview export` manifest
+- `q` → exit the launcher
+
+That route intentionally stays inside the current read-only safety boundary: it does not start,
+submit, or otherwise mutate an exam session.
 
 The default top-level interactive launcher is intentionally broader than `run --tui`: it owns the
 banner, session/login prompts, and course routing before it hands a selected course off to the same

@@ -53,6 +53,12 @@ impl CliCourseRunExecutor {
     }
 }
 
+#[derive(serde::Serialize)]
+struct ExamShowOutput {
+    course: cpass_core::Course,
+    exam: cpass_core::CourseExam,
+}
+
 #[async_trait::async_trait]
 impl CourseRunQueueEntryExecutor for CliCourseRunExecutor {
     async fn execute_queue_entry(
@@ -429,17 +435,8 @@ async fn run(cli: Cli) -> Result<()> {
                 args.exam_id,
                 args.exam_index,
             )?;
-            let course = target.resolve_course(client.fetch_courses().await?)?;
-            let exams = client.fetch_exams(&course).await?;
-            let mut exam = target.resolve_exam(exams)?;
-            let meta = client.fetch_exam_meta(&course, &account, &exam).await?;
-            exam.meta = Some(meta);
-            #[derive(serde::Serialize)]
-            struct ExamShowOutput {
-                course: cpass_core::Course,
-                exam: cpass_core::CourseExam,
-            }
-            print_output(json_output, &ExamShowOutput { course, exam })
+            let output = build_exam_show_output(&client, &account, target).await?;
+            print_output(json_output, &output)
         }
         Some(Commands::Exam {
             command: ExamCommands::Export(args),
@@ -497,39 +494,9 @@ async fn run(cli: Cli) -> Result<()> {
                 args.exam_id,
                 args.exam_index,
             )?;
-            let course = target.resolve_course(client.fetch_courses().await?)?;
-            let exams = client.fetch_exams(&course).await?;
-            let mut exam = target.resolve_exam(exams)?;
-            let meta = client.fetch_exam_meta(&course, &account, &exam).await?;
-            let preview = cpass_core::ExamPreviewQuery::from_exam_meta(&meta).ok_or_else(|| {
-                CpassError::Validation(
-                    "exam preview export requires exam_answer_id from read-only exam cover metadata"
-                        .to_owned(),
-                )
-            })?;
-            exam.meta = Some(meta);
-            let questions = client
-                .fetch_exam_preview_questions(&course, &exam, &preview)
-                .await?;
-            let output_path = args.output.unwrap_or_else(|| {
-                config.paths.export_dir.join(format!(
-                    "exam_preview_{}_{}.json",
-                    course.course_id, exam.exam_id
-                ))
-            });
-            if let Some(parent) = output_path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            let manifest = ExamPreviewExportManifest {
-                generated_at: chrono::Utc::now(),
-                account,
-                course,
-                exam,
-                preview,
-                questions,
-                output_path: output_path.clone(),
-            };
-            std::fs::write(&output_path, serde_json::to_string_pretty(&manifest)?)?;
+            let manifest =
+                build_exam_preview_export_manifest(&config, &client, &account, target, args.output)
+                    .await?;
             print_output(json_output, &manifest)
         }
         Some(Commands::Run(args)) => {
@@ -596,11 +563,14 @@ async fn run(cli: Cli) -> Result<()> {
 struct InteractiveAuthResult {
     selected_phone: String,
     client: ChaoxingClient,
+    account: cpass_core::AccountProfile,
 }
 
 enum InteractiveNextStep {
     Quit,
     RunCourse(CourseRunTarget),
+    ShowExam(ExamRunTarget),
+    ExportExamPreview(ExamRunTarget),
 }
 
 async fn launch_default_interactive(
@@ -614,37 +584,55 @@ async fn launch_default_interactive(
     let Some(auth) = resolve_interactive_auth(&config, fixture_dir).await? else {
         return Ok(());
     };
-    let searcher_pipeline = build_searcher_pipeline(
-        &config.searchers,
-        config_path.parent().unwrap_or(Path::new(".")),
-    )?
-    .map(Arc::new);
     let next_step = prompt_interactive_next_step(&auth.client).await?;
-    let target = match next_step {
-        InteractiveNextStep::Quit => return Ok(()),
-        InteractiveNextStep::RunCourse(target) => target,
-    };
-    let tui = Arc::new(RunTui::new()?);
-    let notifications = NotificationCoordinator::new(&config.notifications);
-    let sink = notifications.wrap_sink(tui.clone());
-    let result = execute_course_run(
-        &config,
-        Some(auth.selected_phone.as_str()),
-        fixture_dir,
-        searcher_pipeline,
-        sink.clone(),
-        target,
-    )
-    .await;
-    let notification_plans = notifications.plans();
-    tui.finish()?;
-    dispatch_notification_plans(
-        &notification_plans,
-        config_path.parent().unwrap_or(Path::new(".")),
-        Duration::from_secs(config.transport.timeout_secs),
-    )
-    .await;
-    result.map(|_| ())
+    match next_step {
+        InteractiveNextStep::Quit => Ok(()),
+        InteractiveNextStep::ShowExam(target) => {
+            let output = build_exam_show_output(&auth.client, &auth.account, target).await?;
+            print_interactive_exam_snapshot(&output)?;
+            Ok(())
+        }
+        InteractiveNextStep::ExportExamPreview(target) => {
+            let manifest = build_exam_preview_export_manifest(
+                &config,
+                &auth.client,
+                &auth.account,
+                target,
+                None,
+            )
+            .await?;
+            print_interactive_exam_preview_export(&manifest)?;
+            Ok(())
+        }
+        InteractiveNextStep::RunCourse(target) => {
+            let searcher_pipeline = build_searcher_pipeline(
+                &config.searchers,
+                config_path.parent().unwrap_or(Path::new(".")),
+            )?
+            .map(Arc::new);
+            let tui = Arc::new(RunTui::new()?);
+            let notifications = NotificationCoordinator::new(&config.notifications);
+            let sink = notifications.wrap_sink(tui.clone());
+            let result = execute_course_run(
+                &config,
+                Some(auth.selected_phone.as_str()),
+                fixture_dir,
+                searcher_pipeline,
+                sink.clone(),
+                target,
+            )
+            .await;
+            let notification_plans = notifications.plans();
+            tui.finish()?;
+            dispatch_notification_plans(
+                &notification_plans,
+                config_path.parent().unwrap_or(Path::new(".")),
+                Duration::from_secs(config.transport.timeout_secs),
+            )
+            .await;
+            result.map(|_| ())
+        }
+    }
 }
 
 fn print_interactive_banner() -> Result<()> {
@@ -716,7 +704,7 @@ async fn interactive_auth_from_selected_session(
     fixture_dir: Option<&Path>,
     selected_phone: &str,
 ) -> Result<Option<InteractiveAuthResult>> {
-    let (client, _account) = client_from_session(config, Some(selected_phone), fixture_dir).await?;
+    let (client, account) = client_from_session(config, Some(selected_phone), fixture_dir).await?;
 
     if client.fetch_account_info().await.is_err() {
         let mut stdout = io::stdout().lock();
@@ -729,6 +717,7 @@ async fn interactive_auth_from_selected_session(
     Ok(Some(InteractiveAuthResult {
         selected_phone: selected_phone.to_owned(),
         client,
+        account,
     }))
 }
 
@@ -776,6 +765,7 @@ async fn prompt_interactive_login(
                 return Ok(Some(InteractiveAuthResult {
                     selected_phone: account.phone.clone(),
                     client,
+                    account,
                 }));
             }
             Err(CpassError::LoginFailed(message)) => {
@@ -841,6 +831,7 @@ async fn prompt_interactive_qr_login(
                 return Ok(InteractiveAuthResult {
                     selected_phone: account.phone.clone(),
                     client,
+                    account,
                 });
             }
             QrLoginPollOutcome::Expired => {
@@ -951,10 +942,8 @@ async fn prompt_interactive_next_step(client: &ChaoxingClient) -> Result<Interac
         .strip_prefix("EXAM|")
         .or_else(|| trimmed.strip_prefix("exam|"))
     {
-        let _ = resolve_interactive_course(selector.trim(), &courses)?;
-        return Err(CpassError::UnsupportedCommand(
-            "interactive EXAM| routing is not implemented yet; use `cpass exam ...` subcommands for now",
-        ));
+        let course = resolve_interactive_course(selector.trim(), &courses)?;
+        return prompt_interactive_exam_step(client, course).await;
     }
 
     let course = resolve_interactive_course(trimmed, &courses)?;
@@ -962,6 +951,190 @@ async fn prompt_interactive_next_step(client: &ChaoxingClient) -> Result<Interac
         Some(course.course_id),
         None,
     )?))
+}
+
+async fn prompt_interactive_exam_step(
+    client: &ChaoxingClient,
+    course: &cpass_core::Course,
+) -> Result<InteractiveNextStep> {
+    let exams = client.fetch_exams(course).await?;
+    if exams.is_empty() {
+        return Err(CpassError::Validation(format!(
+            "course {} has no exams available for interactive EXAM| routing",
+            course.course_id
+        )));
+    }
+
+    let mut stdout = io::stdout().lock();
+    writeln!(stdout, "课程考试:")?;
+    for (index, exam) in exams.iter().enumerate() {
+        writeln!(
+            stdout,
+            "  [{index}] {} [exam_id={}] status={} expire={}",
+            exam.name,
+            exam.exam_id,
+            exam.status,
+            exam.expire_time.as_deref().unwrap_or("-")
+        )?;
+    }
+    writeln!(
+        stdout,
+        "\n请选择考试序号；输入 e<序号> 导出只读预览，输入 q 退出。"
+    )?;
+    write!(stdout, "选择考试: ")?;
+    stdout.flush()?;
+    drop(stdout);
+
+    let selection = read_line_trimmed()?;
+    if selection.eq_ignore_ascii_case("q") {
+        return Ok(InteractiveNextStep::Quit);
+    }
+
+    let (export_preview, index_str) = if let Some(index) = selection.strip_prefix('e') {
+        (true, index.trim())
+    } else if let Some(index) = selection.strip_prefix('E') {
+        (true, index.trim())
+    } else {
+        (false, selection.as_str())
+    };
+
+    let exam_index = index_str.parse::<usize>().map_err(|_| {
+        CpassError::Validation(format!(
+            "invalid exam selection `{selection}`; use an exam index or e<index>"
+        ))
+    })?;
+
+    if exams.get(exam_index).is_none() {
+        return Err(CpassError::Validation(format!(
+            "exam index {exam_index} not found for course {}",
+            course.course_id
+        )));
+    }
+
+    let target = ExamRunTarget::new(Some(course.course_id), None, None, Some(exam_index))?;
+    Ok(if export_preview {
+        InteractiveNextStep::ExportExamPreview(target)
+    } else {
+        InteractiveNextStep::ShowExam(target)
+    })
+}
+
+async fn build_exam_show_output(
+    client: &ChaoxingClient,
+    account: &cpass_core::AccountProfile,
+    target: ExamRunTarget,
+) -> Result<ExamShowOutput> {
+    let course = target.resolve_course(client.fetch_courses().await?)?;
+    let exams = client.fetch_exams(&course).await?;
+    let mut exam = target.resolve_exam(exams)?;
+    let meta = client.fetch_exam_meta(&course, account, &exam).await?;
+    exam.meta = Some(meta);
+    Ok(ExamShowOutput { course, exam })
+}
+
+async fn build_exam_preview_export_manifest(
+    config: &AppConfig,
+    client: &ChaoxingClient,
+    account: &cpass_core::AccountProfile,
+    target: ExamRunTarget,
+    output_override: Option<PathBuf>,
+) -> Result<ExamPreviewExportManifest> {
+    let course = target.resolve_course(client.fetch_courses().await?)?;
+    let exams = client.fetch_exams(&course).await?;
+    let mut exam = target.resolve_exam(exams)?;
+    let meta = client.fetch_exam_meta(&course, account, &exam).await?;
+    let preview = cpass_core::ExamPreviewQuery::from_exam_meta(&meta).ok_or_else(|| {
+        CpassError::Validation(
+            "exam preview export requires exam_answer_id from read-only exam cover metadata"
+                .to_owned(),
+        )
+    })?;
+    exam.meta = Some(meta);
+    let questions = client
+        .fetch_exam_preview_questions(&course, &exam, &preview)
+        .await?;
+    let output_path = output_override.unwrap_or_else(|| {
+        config.paths.export_dir.join(format!(
+            "exam_preview_{}_{}.json",
+            course.course_id, exam.exam_id
+        ))
+    });
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let manifest = ExamPreviewExportManifest {
+        generated_at: chrono::Utc::now(),
+        account: account.clone(),
+        course,
+        exam,
+        preview,
+        questions,
+        output_path: output_path.clone(),
+    };
+    std::fs::write(&output_path, serde_json::to_string_pretty(&manifest)?)?;
+    Ok(manifest)
+}
+
+fn print_interactive_exam_snapshot(output: &ExamShowOutput) -> Result<()> {
+    let mut stdout = io::stdout().lock();
+    writeln!(stdout, "考试快照:")?;
+    writeln!(
+        stdout,
+        "  课程: {} [course_id={}]",
+        output.course.name, output.course.course_id
+    )?;
+    writeln!(
+        stdout,
+        "  考试: {} [exam_id={}]",
+        output.exam.name, output.exam.exam_id
+    )?;
+    writeln!(stdout, "  状态: {}", output.exam.status)?;
+    writeln!(
+        stdout,
+        "  过期时间: {}",
+        output.exam.expire_time.as_deref().unwrap_or("-")
+    )?;
+    if let Some(meta) = &output.exam.meta {
+        writeln!(stdout, "  入口状态: {}", meta.entry_state)?;
+        if let Some(title) = meta.title.as_deref() {
+            writeln!(stdout, "  标题: {title}")?;
+        }
+        if let Some(exam_answer_id) = meta.exam_answer_id {
+            writeln!(stdout, "  exam_answer_id: {exam_answer_id}")?;
+        }
+        if let Some(blocked_message) = meta.blocked_message.as_deref() {
+            writeln!(stdout, "  阻塞信息: {blocked_message}")?;
+        }
+        writeln!(
+            stdout,
+            "  只读边界: 仅展示 exam show 快照；不启动、不提交考试会话"
+        )?;
+    }
+    stdout.flush()?;
+    Ok(())
+}
+
+fn print_interactive_exam_preview_export(manifest: &ExamPreviewExportManifest) -> Result<()> {
+    let mut stdout = io::stdout().lock();
+    writeln!(stdout, "考试预览已导出:")?;
+    writeln!(
+        stdout,
+        "  课程: {} [course_id={}]",
+        manifest.course.name, manifest.course.course_id
+    )?;
+    writeln!(
+        stdout,
+        "  考试: {} [exam_id={}]",
+        manifest.exam.name, manifest.exam.exam_id
+    )?;
+    writeln!(stdout, "  题目数: {}", manifest.questions.len())?;
+    writeln!(stdout, "  输出: {}", manifest.output_path.display())?;
+    writeln!(
+        stdout,
+        "  只读边界: 仅导出 preview 题库快照；不启动、不提交考试会话"
+    )?;
+    stdout.flush()?;
+    Ok(())
 }
 
 fn resolve_interactive_course<'a>(

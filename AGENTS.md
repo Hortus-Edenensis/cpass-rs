@@ -174,6 +174,13 @@ cargo run -p cpass-cli -- --fixture-dir fixtures/legacy --json exam preview expo
     - [x] Wire `openai-compatible` / legacy `OpenAISearcher` through config docs, `cpass run`, and offline integration coverage.
 - [x] Add stubbed integration tests for execution event ordering and export side effects.
 
+## Phase 3.5 — Interactive Launcher Contract
+
+- [x] Align the top-level `cpass` interactive launcher with the legacy `EXAM|...` course-to-exam routing contract without widening read-only safety boundaries.
+  - [x] Route `EXAM|<course selector>` through the launcher, fetch the selected course exam list, and render an interactive exam picker without mutating exam state.
+  - [x] Support exam selection / `e<index>` export in the launcher by reusing read-only `exam show` / `exam preview export` logic instead of starting or submitting an exam session.
+  - [x] Add offline CLI integration tests and docs for the top-level read-only exam route.
+
 ## Phase 4 — Beyond Legacy
 
 - [x] Add live task point support.

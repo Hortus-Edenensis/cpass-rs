@@ -2345,6 +2345,61 @@ fn top_level_launcher_supports_qr_login_flow() {
 }
 
 #[test]
+fn top_level_launcher_routes_exam_selection_to_read_only_snapshot() {
+    let (_temp, config_path) = bootstrap_workspace();
+    let assert = Command::cargo_bin("cpass")
+        .expect("binary")
+        .write_stdin("EXAM|1001\n0\n")
+        .args([
+            "--config",
+            config_path.to_str().expect("utf8 path"),
+            "--fixture-dir",
+            fixture_root().to_str().expect("utf8 path"),
+        ])
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).expect("utf8 stdout");
+    assert!(stdout.contains("课程考试:"));
+    assert!(stdout.contains("[0] 第一单元测验 [exam_id=555001]"));
+    assert!(stdout.contains("考试快照:"));
+    assert!(stdout.contains("入口状态: ready"));
+    assert!(stdout.contains("exam_answer_id: 900001"));
+    assert!(stdout.contains("只读边界: 仅展示 exam show 快照"));
+}
+
+#[test]
+fn top_level_launcher_routes_exam_export_to_preview_manifest() {
+    let (temp, config_path) = bootstrap_workspace();
+    let output_path = temp.path().join("export/exam_preview_1001_555001.json");
+    let assert = Command::cargo_bin("cpass")
+        .expect("binary")
+        .write_stdin("EXAM|1001\ne0\n")
+        .args([
+            "--config",
+            config_path.to_str().expect("utf8 path"),
+            "--fixture-dir",
+            fixture_root().to_str().expect("utf8 path"),
+        ])
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).expect("utf8 stdout");
+    assert!(stdout.contains("课程考试:"));
+    assert!(stdout.contains("考试预览已导出:"));
+    assert!(stdout.contains("题目数: 4"));
+    assert!(stdout.contains("只读边界: 仅导出 preview 题库快照"));
+    assert!(stdout.contains(output_path.to_str().expect("utf8 output path")));
+    assert!(output_path.exists());
+
+    let manifest: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(output_path).expect("manifest")).expect("json");
+    assert_eq!(manifest["course"]["course_id"], 1001);
+    assert_eq!(manifest["exam"]["exam_id"], 555001);
+    assert_eq!(manifest["questions"].as_array().map(Vec::len), Some(4));
+}
+
+#[test]
 fn default_tui_rejects_invalid_course_selection() {
     let (_temp, config_path) = bootstrap_workspace();
     let assert = Command::cargo_bin("cpass")
