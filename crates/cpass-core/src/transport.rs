@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use reqwest::cookie::{CookieStore, Jar};
-use reqwest::header::{COOKIE, HeaderMap, HeaderValue};
+use reqwest::header::{COOKIE, HeaderMap, HeaderName, HeaderValue, USER_AGENT};
 use reqwest::{Method, StatusCode};
 use url::Url;
 
@@ -14,6 +14,10 @@ use crate::config::TransportConfig;
 use crate::error::{CpassError, Result};
 use crate::event::{RunEvent, RunEventSink};
 use crate::models::CookieSnapshot;
+
+const CHA0XING_APP_USER_AGENT: &str = "Dalvik/2.1.0 (Linux; U; Android 12; MI12 Build/SKQ1.211006.001) (schild:6b4dd07967f3ebc3fdbf9e89fbd2d0a1) (device:MI12) Language/zh_CN com.chaoxing.mobile/ChaoXingStudy_3_6.3.9_android_phone_10824_250 (@Kalimdor)_0123456789abcdef0123456789abcdef";
+const X_REQUESTED_WITH_HEADER: &str = "x-requested-with";
+const CHA0XING_APP_PACKAGE: &str = "com.chaoxing.mobile";
 
 #[derive(Debug, Clone)]
 pub enum RequestBody {
@@ -70,7 +74,20 @@ pub struct TransportResponse {
 
 impl TransportResponse {
     pub fn json<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
-        Ok(serde_json::from_str(&self.body)?)
+        serde_json::from_str(&self.body).map_err(|error| {
+            let preview = self
+                .body
+                .lines()
+                .next()
+                .unwrap_or_default()
+                .chars()
+                .take(120)
+                .collect::<String>();
+            CpassError::UnexpectedResponse(format!(
+                "failed to parse JSON response from {} (status {}): {error}; body starts with {:?}",
+                self.final_url, self.status, preview
+            ))
+        })
     }
 }
 
@@ -305,6 +322,22 @@ impl ReqwestChaoxingTransport {
         self
     }
 
+    fn apply_default_request_headers(headers: &mut HeaderMap) {
+        if !headers.contains_key(USER_AGENT) {
+            headers.insert(
+                USER_AGENT,
+                HeaderValue::from_static(CHA0XING_APP_USER_AGENT),
+            );
+        }
+        let requested_with = HeaderName::from_static(X_REQUESTED_WITH_HEADER);
+        if !headers.contains_key(&requested_with) {
+            headers.insert(
+                requested_with,
+                HeaderValue::from_static(CHA0XING_APP_PACKAGE),
+            );
+        }
+    }
+
     fn attach_cookie_header(
         &self,
         request: &TransportRequest,
@@ -367,10 +400,12 @@ impl ChaoxingTransport for ReqwestChaoxingTransport {
                 Some(raw_query) => format!("{}?{raw_query}", request.url),
                 None => request.url.clone(),
             };
+            let mut headers = request.headers.clone();
+            Self::apply_default_request_headers(&mut headers);
             let builder = self
                 .client
                 .request(request.method.clone(), &request_url)
-                .headers(request.headers.clone());
+                .headers(headers);
             let builder = match &request.raw_query {
                 Some(_) => builder,
                 None => builder.query(&request.query),
@@ -435,5 +470,69 @@ impl ChaoxingTransport for FixtureChaoxingTransport {
             final_url,
             body,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reqwest_transport_applies_mobile_app_headers_by_default() {
+        let mut headers = HeaderMap::new();
+        ReqwestChaoxingTransport::apply_default_request_headers(&mut headers);
+
+        assert_eq!(
+            headers
+                .get(USER_AGENT)
+                .and_then(|value| value.to_str().ok()),
+            Some(CHA0XING_APP_USER_AGENT)
+        );
+        assert_eq!(
+            headers
+                .get(HeaderName::from_static(X_REQUESTED_WITH_HEADER))
+                .and_then(|value| value.to_str().ok()),
+            Some(CHA0XING_APP_PACKAGE)
+        );
+    }
+
+    #[test]
+    fn reqwest_transport_keeps_explicit_user_agent_overrides() {
+        let mut headers = HeaderMap::new();
+        headers.insert(USER_AGENT, HeaderValue::from_static("Mozilla/5.0 test"));
+
+        ReqwestChaoxingTransport::apply_default_request_headers(&mut headers);
+
+        assert_eq!(
+            headers
+                .get(USER_AGENT)
+                .and_then(|value| value.to_str().ok()),
+            Some("Mozilla/5.0 test")
+        );
+        assert_eq!(
+            headers
+                .get(HeaderName::from_static(X_REQUESTED_WITH_HEADER))
+                .and_then(|value| value.to_str().ok()),
+            Some(CHA0XING_APP_PACKAGE)
+        );
+    }
+
+    #[test]
+    fn transport_response_json_reports_url_status_and_body_preview() {
+        let response = TransportResponse {
+            status: StatusCode::FORBIDDEN,
+            final_url: "https://mooc1-api.chaoxing.com/gas/clazz".to_owned(),
+            body: "<!doctype html><title>403</title>".to_owned(),
+        };
+
+        let error = response
+            .json::<serde_json::Value>()
+            .expect_err("html response should fail JSON parsing");
+
+        let message = error.to_string();
+        assert!(message.contains("failed to parse JSON response"));
+        assert!(message.contains("https://mooc1-api.chaoxing.com/gas/clazz"));
+        assert!(message.contains("403"));
+        assert!(message.contains("<!doctype html>"));
     }
 }
