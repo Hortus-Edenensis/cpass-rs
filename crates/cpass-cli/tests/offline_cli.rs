@@ -435,6 +435,25 @@ fn bootstrap_workspace_with_invalid_saved_session_fixture() -> (TempDir, PathBuf
     (temp, config_path, fixture_path)
 }
 
+fn bootstrap_workspace_with_invalid_interactive_json_fixture() -> (TempDir, PathBuf, PathBuf) {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let config_path = write_test_config(temp.path());
+    fs::create_dir_all(temp.path().join("session")).expect("session dir");
+    fs::copy(
+        fixture_root().join("legacy_session.json"),
+        temp.path().join("session/13800138000.json"),
+    )
+    .expect("session fixture copied");
+    let fixture_path = temp.path().join("fixture-invalid-interactive-json");
+    copy_fixture_dir(&document_run_fixture_root(), &fixture_path, &[]);
+    fs::write(
+        fixture_path.join("chapter_status.json"),
+        "<!doctype html><title>403</title>",
+    )
+    .expect("invalid chapter status fixture written");
+    (temp, config_path, fixture_path)
+}
+
 fn bootstrap_workspace_with_profile_session_selection() -> (TempDir, PathBuf, PathBuf) {
     let temp = tempfile::tempdir().expect("temp dir");
     let config_path = write_test_config_with_profiles(temp.path());
@@ -2414,10 +2433,14 @@ fn default_tui_rejects_invalid_course_selection() {
         .assert()
         .failure();
 
-    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     assert!(
-        stderr.contains("course selection `99` did not match any course"),
-        "expected invalid selection error, got: {stderr}"
+        stdout.contains("程序运行出现错误, 请截图保存并附上 log 文件在 issue 提交"),
+        "expected legacy interactive error summary, got: {stdout}"
+    );
+    assert!(
+        stdout.contains("course selection `99` did not match any course"),
+        "expected invalid selection detail, got: {stdout}"
     );
 }
 
@@ -2464,6 +2487,28 @@ fn top_level_launcher_falls_back_to_login_when_saved_session_is_invalid() {
     let stdout = String::from_utf8(assert.get_output().stdout.clone()).expect("utf8 stdout");
     assert!(stdout.contains("会话已失效，请重新登录。"));
     assert!(stdout.contains("请输入手机号，留空为二维码登录；输入 q 退出。"));
+}
+
+#[test]
+fn top_level_launcher_translates_backend_json_failures_to_legacy_hint() {
+    let (_temp, config_path, fixture_path) =
+        bootstrap_workspace_with_invalid_interactive_json_fixture();
+    let assert = Command::cargo_bin("cpass")
+        .expect("binary")
+        .write_stdin("0\n")
+        .args([
+            "--config",
+            config_path.to_str().expect("utf8 path"),
+            "--fixture-dir",
+            fixture_path.to_str().expect("utf8 path"),
+        ])
+        .assert()
+        .failure();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).expect("utf8 stdout");
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).expect("utf8 stderr");
+    assert!(stdout.contains("JSON 解析失败, 可能为账号 ck 失效, 请重新登录该账号 (序号+r)"));
+    assert!(!stderr.contains("error: failed to parse JSON response"));
 }
 
 #[test]

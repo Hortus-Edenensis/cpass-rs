@@ -180,6 +180,9 @@ cargo run -p cpass-cli -- --fixture-dir fixtures/legacy --json exam preview expo
   - [x] Route `EXAM|<course selector>` through the launcher, fetch the selected course exam list, and render an interactive exam picker without mutating exam state.
   - [x] Support exam selection / `e<index>` export in the launcher by reusing read-only `exam show` / `exam preview export` logic instead of starting or submitting an exam session.
   - [x] Add offline CLI integration tests and docs for the top-level read-only exam route.
+- [x] Align the top-level `cpass` interactive launcher with the legacy error-surfacing contract so malformed live/fixture responses do not leak raw backend parse errors.
+  - [x] Map interactive JSON/response parse failures to a legacy-style relogin hint instead of the raw `error: ...` prefix.
+  - [x] Add offline CLI coverage and docs for the launcher-side error translation path.
 
 ## Phase 4 — Beyond Legacy
 

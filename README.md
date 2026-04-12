@@ -232,6 +232,10 @@ shell only subscribes to the existing `RunEvent` stream emitted by `CourseRunner
 `CourseRunHeadlessDriver`, and the current mixed video/document/live/chapter-work executor path,
 then renders planning status, queue-state transitions, warnings, and recent events on the CLI side.
 
+When the interactive launcher hits a malformed JSON / HTML contract break from the backend or a
+fixture, it now translates that failure back into the legacy relogin hint instead of dumping the
+raw serde parse prefix directly into the terminal.
+
 When stdout is a real terminal, the shell uses a lightweight alternate-screen refresh loop. When stdout is redirected or captured, it falls back to emitting one final plain-text snapshot so logs and offline integration tests stay deterministic. `--tui` cannot be combined with `--json`.
 
 When `tasks scan` already exposed safe attachment metadata, `cpass run` now carries that same read-only snapshot forward into the plan so future executors can reuse video/document descriptors without adding a second scan pass or widening the safety boundary.

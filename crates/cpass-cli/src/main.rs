@@ -248,8 +248,16 @@ struct RunArgs {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+    let interactive_launcher = cli.command.is_none();
     if let Err(error) = run(cli).await {
-        eprintln!("error: {error}");
+        if interactive_launcher {
+            if let Err(render_error) = print_interactive_error(&error) {
+                eprintln!("error: {error}");
+                eprintln!("error: failed to render interactive launcher error: {render_error}");
+            }
+        } else {
+            eprintln!("error: {error}");
+        }
         std::process::exit(match error {
             CpassError::UnsupportedCommand(_) => 2,
             _ => 1,
@@ -641,6 +649,35 @@ fn print_interactive_banner() -> Result<()> {
     writeln!(stdout, "=========================")?;
     writeln!(stdout, "Version: {}", env!("CARGO_PKG_VERSION"))?;
     writeln!(stdout)?;
+    stdout.flush()?;
+    Ok(())
+}
+
+fn print_interactive_error(error: &CpassError) -> Result<()> {
+    let mut stdout = io::stdout().lock();
+    match error {
+        CpassError::Json(_) => {
+            writeln!(
+                stdout,
+                "JSON 解析失败, 可能为账号 ck 失效, 请重新登录该账号 (序号+r)"
+            )?;
+        }
+        CpassError::UnexpectedResponse(message)
+            if message.starts_with("failed to parse JSON response") =>
+        {
+            writeln!(
+                stdout,
+                "JSON 解析失败, 可能为账号 ck 失效, 请重新登录该账号 (序号+r)"
+            )?;
+        }
+        _ => {
+            writeln!(
+                stdout,
+                "程序运行出现错误, 请截图保存并附上 log 文件在 issue 提交"
+            )?;
+            writeln!(stdout, "详细信息: {error}")?;
+        }
+    }
     stdout.flush()?;
     Ok(())
 }
