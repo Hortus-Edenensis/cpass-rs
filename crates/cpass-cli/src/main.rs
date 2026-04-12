@@ -671,12 +671,12 @@ async fn resolve_interactive_auth(
 
     if sessions.len() == 1 {
         let selected_phone = sessions[0].account.phone.clone();
-        let (client, _account) =
-            client_from_session(config, Some(selected_phone.as_str()), fixture_dir).await?;
-        return Ok(Some(InteractiveAuthResult {
-            selected_phone,
-            client,
-        }));
+        return interactive_auth_from_selected_session(
+            config,
+            fixture_dir,
+            selected_phone.as_str(),
+        )
+        .await;
     }
 
     let mut stdout = io::stdout().lock();
@@ -708,10 +708,26 @@ async fn resolve_interactive_auth(
         .get(index)
         .ok_or_else(|| CpassError::Validation(format!("session index {index} not found")))?;
     let selected_phone = session.account.phone.clone();
-    let (client, _account) =
-        client_from_session(config, Some(selected_phone.as_str()), fixture_dir).await?;
+    interactive_auth_from_selected_session(config, fixture_dir, selected_phone.as_str()).await
+}
+
+async fn interactive_auth_from_selected_session(
+    config: &AppConfig,
+    fixture_dir: Option<&Path>,
+    selected_phone: &str,
+) -> Result<Option<InteractiveAuthResult>> {
+    let (client, _account) = client_from_session(config, Some(selected_phone), fixture_dir).await?;
+
+    if client.fetch_account_info().await.is_err() {
+        let mut stdout = io::stdout().lock();
+        writeln!(stdout, "会话已失效，请重新登录。")?;
+        stdout.flush()?;
+        drop(stdout);
+        return prompt_interactive_login(config, fixture_dir).await;
+    }
+
     Ok(Some(InteractiveAuthResult {
-        selected_phone,
+        selected_phone: selected_phone.to_owned(),
         client,
     }))
 }

@@ -44,13 +44,6 @@ fn rich_option_fixture_root() -> PathBuf {
         .expect("rich option fixture root to exist")
 }
 
-fn qr_login_fixture_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/qr_login")
-        .canonicalize()
-        .expect("qr login fixture root to exist")
-}
-
 fn golden_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../fixtures/golden")
@@ -140,6 +133,38 @@ fn copy_fixture_dir(source: &Path, target: &Path, skipped_file_names: &[&str]) {
         }
         fs::copy(&path, target.join(file_name)).expect("fixture file copied");
     }
+}
+
+fn write_qr_login_fixtures(target: &Path) {
+    fs::create_dir_all(target).expect("qr fixture target dir");
+    fs::write(
+        target.join("login_page_qr.html"),
+        r#"<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>登录</title>
+  </head>
+  <body>
+    <form>
+      <input id="uuid" value="qr-uuid-001" />
+      <input id="enc" value="qr-enc-001" />
+    </form>
+  </body>
+</html>
+"#,
+    )
+    .expect("qr login page fixture written");
+    fs::write(
+        target.join("qr_create_response.txt"),
+        "https://mobilelearn.chaoxing.com/widget/sign/e?id=qr-enc-001&uuid=qr-uuid-001",
+    )
+    .expect("qr create fixture written");
+    fs::write(
+        target.join("qr_auth_status_success.json"),
+        r#"{"status": true}"#,
+    )
+    .expect("qr auth status fixture written");
 }
 
 fn write_session_record(path: &Path, phone: &str, saved_at: &str) {
@@ -392,6 +417,22 @@ fn bootstrap_workspace_with_multiple_sessions() -> (TempDir, PathBuf) {
         "2025-01-01T00:00:00Z",
     );
     (temp, config_path)
+}
+
+fn bootstrap_workspace_with_invalid_saved_session_fixture() -> (TempDir, PathBuf, PathBuf) {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let config_path = write_test_config(temp.path());
+    fs::create_dir_all(temp.path().join("session")).expect("session dir");
+    fs::copy(
+        fixture_root().join("legacy_session.json"),
+        temp.path().join("session/13800138000.json"),
+    )
+    .expect("session fixture copied");
+    let fixture_path = temp.path().join("fixture-invalid-session");
+    copy_fixture_dir(&fixture_root(), &fixture_path, &[]);
+    fs::write(fixture_path.join("account_info.json"), "{\"result\":0}")
+        .expect("invalid account info fixture written");
+    (temp, config_path, fixture_path)
 }
 
 fn bootstrap_workspace_with_profile_session_selection() -> (TempDir, PathBuf, PathBuf) {
@@ -2282,7 +2323,7 @@ fn top_level_launcher_supports_qr_login_flow() {
     let (temp, config_path) = bootstrap_workspace_without_sessions();
     let fixture_path = temp.path().join("fixture-qr-login");
     copy_fixture_dir(&document_run_fixture_root(), &fixture_path, &[]);
-    copy_fixture_dir(&qr_login_fixture_root(), &fixture_path, &[]);
+    write_qr_login_fixtures(&fixture_path);
     let assert = Command::cargo_bin("cpass")
         .expect("binary")
         .write_stdin("\n0\n")
@@ -2347,6 +2388,27 @@ fn top_level_launcher_prompts_for_session_selection_when_multiple_sessions_exist
     assert!(stdout.contains("选择会话序号"));
     assert!(stdout.contains("课程列表:"));
     assert!(stdout.contains("cpass run TUI"));
+}
+
+#[test]
+fn top_level_launcher_falls_back_to_login_when_saved_session_is_invalid() {
+    let (_temp, config_path, fixture_path) =
+        bootstrap_workspace_with_invalid_saved_session_fixture();
+    let assert = Command::cargo_bin("cpass")
+        .expect("binary")
+        .write_stdin("q\n")
+        .args([
+            "--config",
+            config_path.to_str().expect("utf8 path"),
+            "--fixture-dir",
+            fixture_path.to_str().expect("utf8 path"),
+        ])
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).expect("utf8 stdout");
+    assert!(stdout.contains("会话已失效，请重新登录。"));
+    assert!(stdout.contains("请输入手机号，留空为二维码登录；输入 q 退出。"));
 }
 
 #[test]

@@ -2022,7 +2022,20 @@ mod tests {
 
     #[test]
     fn parses_qr_login_bootstrap_fixture() {
-        let fixture = include_str!("../../tests/fixtures/qr_login/login_page_qr.html");
+        let fixture = r#"<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>登录</title>
+  </head>
+  <body>
+    <form>
+      <input id="uuid" value="qr-uuid-001" />
+      <input id="enc" value="qr-enc-001" />
+    </form>
+  </body>
+</html>
+"#;
         let bootstrap = parse_qr_login_bootstrap(fixture).expect("qr bootstrap");
         assert_eq!(bootstrap.uuid, "qr-uuid-001");
         assert_eq!(bootstrap.enc, "qr-enc-001");
@@ -2030,7 +2043,7 @@ mod tests {
 
     #[test]
     fn parses_qr_login_status_fixture() {
-        let fixture = include_str!("../../tests/fixtures/qr_login/qr_auth_status_success.json");
+        let fixture = r#"{"status": true}"#;
         let value: serde_json::Value =
             serde_json::from_str(fixture).expect("valid qr auth status fixture");
         assert_eq!(
