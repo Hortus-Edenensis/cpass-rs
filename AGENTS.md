@@ -248,6 +248,14 @@ cargo run -p cpass-cli -- --fixture-dir fixtures/legacy --json exam preview expo
     - [-] Record the landed in-repo plain-`mqtt://` broker harness (`config_validate_dispatches_live_mqtt_notification_to_local_broker`) and narrow the remaining validation gap to TLS broker coverage in docs/checklist. Replaced by the more specific restored broker-backed validation subtask above.
     - [-] Add live MQTT delivery validation coverage and final docs once the live backend exists and a broker-backed verification strategy is approved. Replaced by the restored compile-validating subtask above plus the completed broker-validation rerun.
 - [x] Add non-interactive profiles and stronger automation-oriented CLI flows.
+
+## Phase 5 — Mutating Exam Parity
+
+- [ ] Restore the legacy mutating exam worker semantics (`get_meta` → `start` → fetch/save answers → final submit) in the Rust launcher. Blocked: the repository still only has read-only exam cover/preview fixtures; there is no reviewed fixture bundle for `exam/phone/start`, `exam/test/reVersionTestStartNew`, `exam/phone/loadAnswerStatic`, or `exam/test/reVersionSubmitTestNew`, so implementing side-effecting exam flows would violate the current approved-contract rule.
+  - [x] Audit the legacy mutating exam flow and record the exact endpoint/state prerequisites plus the fixture capture contract required before implementation can begin safely.
+  - [ ] Capture one reviewed mutating exam session fixture bundle covering cover metadata, start redirect, answer-sheet status, question fetch, preview refresh, per-question submit/save, and final-submit responses. Blocked: no such reviewed runtime corpus exists in-repo yet.
+  - [ ] Add core exam-session parser/runtime models for mutable exam state (`enc`, remain-time fields, answer-sheet state, submit acknowledgements) once the reviewed fixture bundle exists. Blocked: parser/runtime contracts depend on the missing reviewed mutating exam fixtures.
+  - [ ] Implement the launcher exam worker semantics, offline CLI coverage, and docs once the mutating exam fixture bundle is reviewed and approved. Blocked: the required start/submit fixture-backed runtime contract has not been approved.
   - [x] Add named config profiles with partial override merge rules plus `--profile` / `CPASS_PROFILE` selection, unit tests, offline CLI coverage, and docs.
   - [x] Surface the selected profile and normalized automation paths in `config validate` / `doctor` output for scripting-friendly inspection.
   - [x] Add stricter non-interactive session and target-resolution helpers for automation-oriented CLI flows, with offline coverage.
