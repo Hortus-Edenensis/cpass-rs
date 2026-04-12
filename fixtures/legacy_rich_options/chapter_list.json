@@ -1,0 +1,25 @@
+{
+  "data": [
+    {
+      "course": {
+        "data": [
+          {
+            "knowledge": {
+              "data": [
+                {
+                  "id": 11,
+                  "jobcount": 1,
+                  "indexorder": 1,
+                  "name": "图文测验",
+                  "label": "1",
+                  "layer": 0,
+                  "status": "open"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

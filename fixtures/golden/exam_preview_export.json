@@ -1,0 +1,119 @@
+{
+  "account": {
+    "name": "Legacy User",
+    "phone": "13800138000",
+    "puid": 114514,
+    "school": "示例大学",
+    "sex": "male",
+    "student_id": "20240001"
+  },
+  "course": {
+    "class_id": 2002,
+    "course_id": 1001,
+    "cpi": 3003,
+    "key": 4004,
+    "name": "现代汉语",
+    "state": "进行中",
+    "teacher_name": "王老师"
+  },
+  "exam": {
+    "class_id": 2002,
+    "course_id": 1001,
+    "cpi": 3003,
+    "enc_task": "enc-alpha",
+    "exam_id": 555001,
+    "expire_time": "剩余 2 天",
+    "meta": {
+      "blocked_message": null,
+      "captcha_id": "captcha-alpha",
+      "entry_state": "ready",
+      "exam_answer_id": 900001,
+      "monitor_enc": "monitor-alpha",
+      "need_captcha": true,
+      "need_code": false,
+      "need_face": true,
+      "title": "第一单元测验"
+    },
+    "name": "第一单元测验",
+    "status": "未交"
+  },
+  "generated_at": "<normalized>",
+  "output_path": "<normalized>",
+  "preview": {
+    "exam_answer_id": 900001
+  },
+  "questions": [
+    {
+      "options": [
+        {
+          "key": "A",
+          "value": "吴方言"
+        },
+        {
+          "key": "B",
+          "value": "北方方言"
+        },
+        {
+          "key": "C",
+          "value": "粤方言"
+        },
+        {
+          "key": "D",
+          "value": "闽方言"
+        }
+      ],
+      "prompt": "普通话以哪种方言为基础方言？",
+      "question_id": 700001,
+      "question_index": 0,
+      "question_type": 0,
+      "question_type_label": "单选题",
+      "question_kind": "single_choice"
+    },
+    {
+      "options": [
+        {
+          "key": "A",
+          "value": "语音规范"
+        },
+        {
+          "key": "B",
+          "value": "词汇规范"
+        },
+        {
+          "key": "C",
+          "value": "语法规范"
+        },
+        {
+          "key": "D",
+          "value": "文字规范"
+        }
+      ],
+      "prompt": "下列属于现代汉语规范化要求的有？",
+      "question_id": 700002,
+      "question_index": 1,
+      "question_type": 1,
+      "question_type_label": "多选题",
+      "question_kind": "multiple_choice"
+    },
+    {
+      "blanks": [
+        "词义：",
+        "词性："
+      ],
+      "prompt": "填写“语言”和“言语”的对应概念。",
+      "question_id": 700003,
+      "question_index": 2,
+      "question_type": 2,
+      "question_type_label": "填空题",
+      "question_kind": "fill_blank"
+    },
+    {
+      "prompt": "现代汉语共同语就是普通话。",
+      "question_id": 700004,
+      "question_index": 3,
+      "question_type": 3,
+      "question_type_label": "判断题",
+      "question_kind": "true_false"
+    }
+  ]
+}

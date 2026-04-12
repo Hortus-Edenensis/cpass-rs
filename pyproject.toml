@@ -1,7 +1,9 @@
+# Legacy-only Python reference environment. The supported runtime lives under `crates/`.
 [tool.poetry]
 name = "CxKitty"
 version = "0.4.5"
-description = "超星学习通答题姬. 媒体播放、章节测验、课程考试, 集成式自动化工具"
+description = "Legacy-only Python reference environment for fixture capture and protocol comparison during the Rust rewrite"
+# `poetry install` here is an opt-in investigation workflow, not the default bootstrap/CI/release path.
 license = "GPL-3.0"
 authors = ["SocialSisterYi <1440239038@qq.com>"]
 readme = "README.md"
@@ -16,6 +18,7 @@ priority = "default"
 
 
 [tool.poetry.dependencies]
+# Keep this environment narrowly scoped to legacy fixture capture / protocol comparison work.
 python = ">=3.10,<3.12"
 requests = "^2.28.1"
 qrcode = "^7.3.1"

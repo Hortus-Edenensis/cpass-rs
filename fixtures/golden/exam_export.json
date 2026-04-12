@@ -1,0 +1,149 @@
+{
+  "account": {
+    "name": "Legacy User",
+    "phone": "13800138000",
+    "puid": 114514,
+    "school": "示例大学",
+    "sex": "male",
+    "student_id": "20240001"
+  },
+  "course": {
+    "class_id": 2002,
+    "course_id": 1001,
+    "cpi": 3003,
+    "key": 4004,
+    "name": "现代汉语",
+    "state": "进行中",
+    "teacher_name": "王老师"
+  },
+  "exams": [
+    {
+      "class_id": 2002,
+      "course_id": 1001,
+      "cpi": 3003,
+      "enc_task": "enc-alpha",
+      "exam_id": 555001,
+      "expire_time": "剩余 2 天",
+      "meta": {
+        "blocked_message": null,
+        "captcha_id": "captcha-alpha",
+        "entry_state": "ready",
+        "exam_answer_id": 900001,
+        "monitor_enc": "monitor-alpha",
+        "need_captcha": true,
+        "need_code": false,
+        "need_face": true,
+        "title": "第一单元测验"
+      },
+      "name": "第一单元测验",
+      "status": "未交"
+    },
+    {
+      "class_id": 2002,
+      "course_id": 1001,
+      "cpi": 3003,
+      "enc_task": "enc-beta",
+      "exam_id": 555002,
+      "expire_time": null,
+      "meta": {
+        "blocked_message": null,
+        "captcha_id": null,
+        "entry_state": "completed",
+        "exam_answer_id": null,
+        "monitor_enc": null,
+        "need_captcha": false,
+        "need_code": false,
+        "need_face": false,
+        "title": null
+      },
+      "name": "第二单元测验",
+      "status": "已完成"
+    },
+    {
+      "class_id": 2002,
+      "course_id": 1001,
+      "cpi": 3003,
+      "enc_task": "enc-gamma",
+      "exam_id": 555003,
+      "expire_time": null,
+      "meta": {
+        "blocked_message": "考试尚未开始",
+        "captcha_id": null,
+        "entry_state": "blocked",
+        "exam_answer_id": null,
+        "monitor_enc": null,
+        "need_captcha": false,
+        "need_code": false,
+        "need_face": false,
+        "title": null
+      },
+      "name": "第三单元测验",
+      "status": "未开始"
+    },
+    {
+      "class_id": 2002,
+      "course_id": 1001,
+      "cpi": 3003,
+      "enc_task": "enc-delta",
+      "exam_id": 555004,
+      "expire_time": null,
+      "meta": {
+        "blocked_message": "章节任务点未完成，请完成任务点后再参加考试",
+        "captcha_id": null,
+        "entry_state": "blocked",
+        "exam_answer_id": null,
+        "monitor_enc": null,
+        "need_captcha": false,
+        "need_code": false,
+        "need_face": false,
+        "title": null
+      },
+      "name": "第四单元测验",
+      "status": "待参加"
+    },
+    {
+      "class_id": 2002,
+      "course_id": 1001,
+      "cpi": 3003,
+      "enc_task": "enc-epsilon",
+      "exam_id": 555005,
+      "expire_time": null,
+      "meta": {
+        "blocked_message": "请使用指定的IP环境进行考试。",
+        "captcha_id": null,
+        "entry_state": "blocked",
+        "exam_answer_id": null,
+        "monitor_enc": null,
+        "need_captcha": false,
+        "need_code": false,
+        "need_face": false,
+        "title": null
+      },
+      "name": "第五单元测验",
+      "status": "待参加"
+    },
+    {
+      "class_id": 2002,
+      "course_id": 1001,
+      "cpi": 3003,
+      "enc_task": "enc-zeta",
+      "exam_id": 555006,
+      "expire_time": null,
+      "meta": {
+        "blocked_message": "该试卷只允许在电脑考试客户端考试,完成考试后可在手机端查看",
+        "captcha_id": null,
+        "entry_state": "blocked",
+        "exam_answer_id": null,
+        "monitor_enc": null,
+        "need_captcha": false,
+        "need_code": false,
+        "need_face": false,
+        "title": null
+      },
+      "name": "第六单元测验",
+      "status": "待参加"
+    }
+  ],
+  "generated_at": "<normalized>",
+  "output_path": "<normalized>"
+}

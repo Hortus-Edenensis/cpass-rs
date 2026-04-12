@@ -1,0 +1,25 @@
+{
+  "data": [
+    {
+      "course": {
+        "data": [
+          {
+            "knowledge": {
+              "data": [
+                {
+                  "id": 13,
+                  "jobcount": 1,
+                  "indexorder": 3,
+                  "name": "直播",
+                  "label": "3",
+                  "layer": 0,
+                  "status": "open"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

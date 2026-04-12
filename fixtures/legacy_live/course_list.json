@@ -1,0 +1,22 @@
+{
+  "result": 1,
+  "channelList": [
+    {
+      "cpi": 3003,
+      "key": 4004,
+      "content": {
+        "id": 2002,
+        "state": 0,
+        "course": {
+          "data": [
+            {
+              "id": 1001,
+              "name": "现代汉语",
+              "teacherfactor": "王老师"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

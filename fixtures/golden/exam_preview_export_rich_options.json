@@ -1,0 +1,81 @@
+{
+  "account": {
+    "name": "Legacy User",
+    "phone": "13800138000",
+    "puid": 114514,
+    "school": "示例大学",
+    "sex": "male",
+    "student_id": "20240001"
+  },
+  "course": {
+    "class_id": 2002,
+    "course_id": 1001,
+    "cpi": 3003,
+    "key": 4004,
+    "name": "现代汉语",
+    "state": "进行中",
+    "teacher_name": "王老师"
+  },
+  "exam": {
+    "class_id": 2002,
+    "course_id": 1001,
+    "cpi": 3003,
+    "enc_task": "enc-alpha",
+    "exam_id": 555001,
+    "expire_time": "剩余 2 天",
+    "meta": {
+      "blocked_message": null,
+      "captcha_id": "captcha-alpha",
+      "entry_state": "ready",
+      "exam_answer_id": 900001,
+      "monitor_enc": "monitor-alpha",
+      "need_captcha": true,
+      "need_code": false,
+      "need_face": true,
+      "title": "第一单元测验"
+    },
+    "name": "第一单元测验",
+    "status": "未交"
+  },
+  "generated_at": "<normalized>",
+  "output_path": "<normalized>",
+  "preview": {
+    "exam_answer_id": 900001
+  },
+  "questions": [
+    {
+      "options": [
+        {
+          "key": "A",
+          "rich_content": {
+            "image_urls": [
+              "https://static.example/a.png"
+            ],
+            "source_html": "<span>图文 <strong>选项</strong><img src=\"https://static.example/a.png\"></span>"
+          },
+          "value": "图文 选项"
+        },
+        {
+          "key": "B",
+          "rich_content": {
+            "image_urls": [
+              "https://static.example/b.png"
+            ],
+            "source_html": "<img src=\"https://static.example/b.png\">"
+          },
+          "value": ""
+        },
+        {
+          "key": "C",
+          "value": "纯文本选项"
+        }
+      ],
+      "prompt": "请选择图文选项",
+      "question_id": 810001,
+      "question_index": 0,
+      "question_type": 0,
+      "question_type_label": "单选题",
+      "question_kind": "single_choice"
+    }
+  ]
+}

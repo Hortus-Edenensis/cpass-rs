@@ -1,0 +1,39 @@
+{
+  "result": 1,
+  "channelList": [
+    {
+      "cpi": 3003,
+      "key": 4004,
+      "content": {
+        "id": 2002,
+        "state": 0,
+        "course": {
+          "data": [
+            {
+              "id": 1001,
+              "name": "现代汉语",
+              "teacherfactor": "王老师"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "cpi": 3004,
+      "key": 4005,
+      "content": {
+        "id": 2003,
+        "state": 1,
+        "course": {
+          "data": [
+            {
+              "id": 1002,
+              "name": "中国古代文学",
+              "teacherfactor": "李老师"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

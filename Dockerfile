@@ -1,19 +1,33 @@
-FROM python:3.10
+FROM rust:1.93-bookworm AS builder
 
-ENV TZ="Asia/Shanghai"
+WORKDIR /workspace
+COPY Cargo.toml ./
+COPY crates/cpass-core/Cargo.toml crates/cpass-core/Cargo.toml
+COPY crates/cpass-cli/Cargo.toml crates/cpass-cli/Cargo.toml
+RUN mkdir -p crates/cpass-core/src crates/cpass-cli/src && \
+    printf 'pub fn bootstrap() {}\n' > crates/cpass-core/src/lib.rs && \
+    printf 'fn main() {}\n' > crates/cpass-cli/src/main.rs && \
+    cargo build --release -p cpass-cli && \
+    rm -rf crates/cpass-core/src crates/cpass-cli/src
 
-# 安装必要组件
-RUN apt update && \
-    apt-get -y install libgl1-mesa-glx && \
-    pip install poetry
+COPY . .
+RUN cargo build --release -p cpass-cli
 
-# 安装依赖
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    useradd --create-home --uid 10001 cpass
+
 WORKDIR /app
-COPY ["pyproject.toml", "poetry.lock", "/app/"]
-RUN poetry config virtualenvs.in-project true && \
-    poetry install
+COPY --from=builder /workspace/target/release/cpass /usr/local/bin/cpass
+COPY config.example.yml /app/config.example.yml
+COPY docs/legacy-reference.md /app/legacy-reference.md
 
-# 添加源文件
-COPY . /app
+RUN mkdir -p /app/session /app/logs /app/export /app/faces && \
+    chown -R cpass:cpass /app
 
-ENTRYPOINT ["poetry", "run", "python3", "main.py"]
+USER cpass
+ENTRYPOINT ["/usr/local/bin/cpass"]
+CMD ["--help"]

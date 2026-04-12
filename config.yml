@@ -63,11 +63,26 @@ exam:
 # --------------------
 
 # 搜索器选择 (可同时使用多个搜索器, 以 yaml 语法中 list 格式添加, `type`字段决定搜索器类型)
-# 可用的搜索器有: restApiSearcher jsonFileSearcher sqliteSearcher enncySearcher cxSearcher LemonSearcher OpenAISearcher
+# Rust 当前已接通: http / restApiSearcher / JsonApiSearcher / jsonFileSearcher / sqliteSearcher / openai-compatible / OpenAISearcher
+# 其余 legacy 搜索器仍只作为兼容参考
 searchers:
   # 本地 JSON 数据库搜索器 (key为题, value为答案)
   # - type: jsonFileSearcher
   #   file_path: "questions.json"  # 数据库文件路径
+
+  # 通用 HTTP 在线搜题
+  # - type: http
+  #   url: "http://10.50.9.10:8088/question/search"  # API URL 请进行替换
+  #   payload_mode: "form"  # 或 "json"
+  #   method: "POST"  # 请求方式
+  #   q_field: "question"  # 题目文本参数
+  #   o_field: "options"  # 选项文本参数 (可选)
+  #   headers:  # 自定义请求头 (可选) 使用 yaml 的 k-v 语法填写
+  #     # eg: Authorization: 'xxx'
+  #   ext_params: # 自定义扩展请求参数 (可选) 使用 yaml 的 k-v 语法填写
+  #     # eg: Token: 'xxx'
+  #   a_field: "$.data"  # 返回参数 使用受限 JSONPath 语法进行查询
+  #   fixture_response_path: null  # 可选: 离线回放响应 JSON 文件
 
   # REST API 在线搜题
   # - type: restApiSearcher
@@ -129,9 +144,11 @@ searchers:
   #   model: "gpt-3.5-turbo" # 使用的模型型号
   #   system_prompt: "你是一位乐于回答问题的专家，每为用户回答一道问题你都会开心地获得5美元小费，对于用户提出的每一道问题，你只需要给出答案，不要输出任何其他的内容。\n对于判断题，只需回复对/错。"
   #   prompt: "请回答下这个{type}：\n{value}\n{options}" 
+  #   fixture_response_path: null  # 可选: 离线回放 chat-completions 响应 JSON 文件
   # # {type} ：题目类型 (单选题、多选题 等等)
   # # {value}：题干
   # # {options}：选项文本（eg:"选项：\nA. assurance;B. insurance;C. requirement;D. issure"），如果题目没有选项（如填空题），则为空
+  # # `openai-compatible` 是 Rust 侧通用写法；legacy `OpenAISearcher` 会映射到同一套协议
 
 
   # OllamaSearcherAPI ollama本地自部署答题

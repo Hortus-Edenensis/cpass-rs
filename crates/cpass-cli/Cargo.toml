@@ -1,0 +1,34 @@
+[package]
+name = "cpass-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "cpass"
+path = "src/main.rs"
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+clap.workspace = true
+cpass-core = { path = "../cpass-core" }
+reqwest.workspace = true
+qrcode.workspace = true
+rustls.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
+webpki-roots.workspace = true
+
+[dev-dependencies]
+assert_cmd = "2.1.1"
+tempfile = "3.23.0"
+tokio-rustls.workspace = true
+webpki-roots.workspace = true
+
+[lints]
+workspace = true

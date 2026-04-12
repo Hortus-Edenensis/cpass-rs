@@ -1,0 +1,14 @@
+{
+  "data": [
+    {
+      "card": {
+        "data": [
+          {
+            "title": "绪论视频",
+            "description": "<iframe module=\"insertvideo\" data='{\"objectid\":\"video-001\"}'></iframe>"
+          }
+        ]
+      }
+    }
+  ]
+}

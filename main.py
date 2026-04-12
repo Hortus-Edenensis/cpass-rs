@@ -1,4 +1,10 @@
 #!/bin/python3
+"""Legacy-only Python reference entrypoint.
+
+The supported runtime for this repository is the Rust CLI under `crates/`.
+Use this file only for fixture capture or protocol-comparison investigations.
+"""
+
 import json
 import sys
 import time

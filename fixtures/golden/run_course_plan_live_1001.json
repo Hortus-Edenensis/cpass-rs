@@ -1,0 +1,164 @@
+{
+  "course": {
+    "course_id": 1001,
+    "class_id": 2002,
+    "cpi": 3003,
+    "key": 4004,
+    "name": "现代汉语",
+    "teacher_name": "王老师",
+    "state": "进行中"
+  },
+  "chapters": [
+    {
+      "chapter_id": 13,
+      "jobs": 1,
+      "chapter_index": 3,
+      "chapter_name": "直播",
+      "chapter_label": "3",
+      "layer": 0,
+      "status": "open",
+      "point_total": 1,
+      "point_finished": 0,
+      "task_points": [
+        {
+          "card_index": 0,
+          "point_index": 0,
+          "module": "insertlive",
+          "task_kind": {
+            "kind": "live"
+          },
+          "title": "直播任务点",
+          "resource_id": "live-course-001",
+          "iframe_data": "{\"liveId\":\"live-course-001\",\"vdoid\":\"vdo-live-001\",\"streamName\":\"zhibo_12345\"}",
+          "attachment_metadata": {
+            "attachment": {
+              "attachment_type": "live",
+              "title": "直播任务点",
+              "stream_name": "zhibo_12345",
+              "vdo_id": "vdo-live-001",
+              "live_id": "live-course-001",
+              "job_id": "job-live-001",
+              "is_job": true
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "execution_queue": [
+    {
+      "queue_index": 0,
+      "chapter_id": 13,
+      "chapter_index": 3,
+      "chapter_name": "直播",
+      "chapter_label": "3",
+      "card_index": 0,
+      "point_index": 0,
+      "module": "insertlive",
+      "task_kind": {
+        "kind": "live"
+      },
+      "title": "直播任务点",
+      "resource_id": "live-course-001",
+      "iframe_data": "{\"liveId\":\"live-course-001\",\"vdoid\":\"vdo-live-001\",\"streamName\":\"zhibo_12345\"}",
+      "attachment_metadata": {
+        "attachment": {
+          "attachment_type": "live",
+          "title": "直播任务点",
+          "stream_name": "zhibo_12345",
+          "vdo_id": "vdo-live-001",
+          "live_id": "live-course-001",
+          "job_id": "job-live-001",
+          "is_job": true
+        }
+      }
+    }
+  ],
+  "total_task_points": 1,
+  "execution_preflight": {
+    "all_entries_registered": true,
+    "total_entries": 1,
+    "registered_entries": 1,
+    "blocked_entries": 0,
+    "queue": [
+      {
+        "queue_index": 0,
+        "resolution": {
+          "status": "registered",
+          "registration": {
+            "key": "live",
+            "module": "insertlive"
+          }
+        }
+      }
+    ]
+  },
+  "execution_result": {
+    "course_id": 1001,
+    "state": "blocked",
+    "total_entries": 1,
+    "completed_entries": 0,
+    "blocked_entries": 1,
+    "queue": [
+      {
+        "queue_index": 0,
+        "state": "blocked",
+        "resolution": {
+          "status": "registered",
+          "registration": {
+            "key": "live",
+            "module": "insertlive"
+          }
+        }
+      }
+    ]
+  },
+  "events": [
+    {
+      "event": "course_run_planning_started",
+      "course_id": 1001,
+      "course_index": null
+    },
+    {
+      "event": "course_run_planning_finished",
+      "course_id": 1001,
+      "chapters": 1,
+      "task_points": 1
+    },
+    {
+      "event": "course_run_execution_started",
+      "course_id": 1001,
+      "total_entries": 1
+    },
+    {
+      "event": "course_run_queue_entry_state_changed",
+      "course_id": 1001,
+      "queue_index": 0,
+      "state": "running"
+    },
+    {
+      "event": "course_run_live_progress_reported",
+      "course_id": 1001,
+      "queue_index": 0,
+      "success": true
+    },
+    {
+      "event": "warning",
+      "message": "queue entry 0 acknowledged the reviewed live progress-report route for live-course-001 and stopped fail-closed before attendance, completion, or any additional live runtime endpoints are called"
+    },
+    {
+      "event": "course_run_queue_entry_state_changed",
+      "course_id": 1001,
+      "queue_index": 0,
+      "state": "blocked"
+    },
+    {
+      "event": "course_run_execution_finished",
+      "course_id": 1001,
+      "state": "blocked",
+      "total_entries": 1,
+      "completed_entries": 0,
+      "blocked_entries": 1
+    }
+  ]
+}

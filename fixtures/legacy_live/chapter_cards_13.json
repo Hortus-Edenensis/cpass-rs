@@ -1,0 +1,14 @@
+{
+  "data": [
+    {
+      "card": {
+        "data": [
+          {
+            "title": "直播任务点",
+            "description": "<iframe module=\"insertlive\" data='{\"liveId\":\"live-course-001\",\"vdoid\":\"vdo-live-001\",\"streamName\":\"zhibo_12345\"}'></iframe>"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -5,3 +5,7 @@ logs/
 questions.*
 export/*
 faces/*
+target/
+.git/
+__pycache__/
+.venv/

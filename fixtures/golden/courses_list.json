@@ -1,0 +1,20 @@
+[
+  {
+    "class_id": 2002,
+    "course_id": 1001,
+    "cpi": 3003,
+    "key": 4004,
+    "name": "现代汉语",
+    "state": "进行中",
+    "teacher_name": "王老师"
+  },
+  {
+    "class_id": 2003,
+    "course_id": 1002,
+    "cpi": 3004,
+    "key": 4005,
+    "name": "中国古代文学",
+    "state": "已结课",
+    "teacher_name": "李老师"
+  }
+]

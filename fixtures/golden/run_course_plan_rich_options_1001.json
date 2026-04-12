@@ -1,0 +1,193 @@
+{
+  "course": {
+    "course_id": 1001,
+    "class_id": 2002,
+    "cpi": 3003,
+    "key": 4004,
+    "name": "现代汉语",
+    "teacher_name": "王老师",
+    "state": "进行中"
+  },
+  "chapters": [
+    {
+      "chapter_id": 11,
+      "jobs": 1,
+      "chapter_index": 1,
+      "chapter_name": "图文测验",
+      "chapter_label": "1",
+      "layer": 0,
+      "status": "open",
+      "point_total": 1,
+      "point_finished": 0,
+      "task_points": [
+        {
+          "card_index": 0,
+          "point_index": 0,
+          "module": "work",
+          "task_kind": {
+            "kind": "chapter_work"
+          },
+          "title": "图文作业",
+          "resource_id": "work-001",
+          "iframe_data": "{\"workid\":\"work-001\",\"_jobid\":\"job-001\"}",
+          "chapter_work_metadata": {
+            "work_id": "work-001",
+            "job_id": "job-001"
+          }
+        }
+      ]
+    }
+  ],
+  "execution_queue": [
+    {
+      "queue_index": 0,
+      "chapter_id": 11,
+      "chapter_index": 1,
+      "chapter_name": "图文测验",
+      "chapter_label": "1",
+      "card_index": 0,
+      "point_index": 0,
+      "module": "work",
+      "task_kind": {
+        "kind": "chapter_work"
+      },
+      "title": "图文作业",
+      "resource_id": "work-001",
+      "iframe_data": "{\"workid\":\"work-001\",\"_jobid\":\"job-001\"}",
+      "chapter_work_metadata": {
+        "work_id": "work-001",
+        "job_id": "job-001"
+      }
+    }
+  ],
+  "total_task_points": 1,
+  "execution_preflight": {
+    "all_entries_registered": true,
+    "total_entries": 1,
+    "registered_entries": 1,
+    "blocked_entries": 0,
+    "queue": [
+      {
+        "queue_index": 0,
+        "resolution": {
+          "status": "registered",
+          "registration": {
+            "key": "chapter_work",
+            "module": "work"
+          }
+        }
+      }
+    ]
+  },
+  "execution_result": {
+    "course_id": 1001,
+    "state": "blocked",
+    "total_entries": 1,
+    "completed_entries": 0,
+    "blocked_entries": 1,
+    "queue": [
+      {
+        "queue_index": 0,
+        "state": "blocked",
+        "resolution": {
+          "status": "registered",
+          "registration": {
+            "key": "chapter_work",
+            "module": "work"
+          }
+        }
+      }
+    ]
+  },
+  "events": [
+    {
+      "event": "course_run_planning_started",
+      "course_id": 1001,
+      "course_index": null
+    },
+    {
+      "event": "course_run_planning_finished",
+      "course_id": 1001,
+      "chapters": 1,
+      "task_points": 1
+    },
+    {
+      "event": "course_run_execution_started",
+      "course_id": 1001,
+      "total_entries": 1
+    },
+    {
+      "event": "course_run_queue_entry_state_changed",
+      "course_id": 1001,
+      "queue_index": 0,
+      "state": "running"
+    },
+    {
+      "event": "course_run_chapter_work_snapshot_fetched",
+      "course_id": 1001,
+      "queue_index": 0,
+      "snapshot": {
+        "title": "图文作业",
+        "work_answer_id": 99009,
+        "total_question_num": 1,
+        "work_relation_id": 88009,
+        "full_score": "100",
+        "enc_work": "enc-rich-work",
+        "questions": [
+          {
+            "question_index": 0,
+            "question_id": 710001,
+            "question_type": 0,
+            "question_type_label": "单选题",
+            "question_kind": "single_choice",
+            "prompt": "请选择图文选项",
+            "options": [
+              {
+                "key": "A",
+                "value": "图文 选项",
+                "rich_content": {
+                  "source_html": "<span>图文 <strong>选项</strong><img src=\"https://static.example/work-a.png\"></span>",
+                  "image_urls": [
+                    "https://static.example/work-a.png"
+                  ]
+                }
+              },
+              {
+                "key": "B",
+                "value": "",
+                "rich_content": {
+                  "source_html": "<img src=\"https://static.example/work-b.png\">",
+                  "image_urls": [
+                    "https://static.example/work-b.png"
+                  ]
+                }
+              },
+              {
+                "key": "C",
+                "value": "纯文本选项"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "event": "warning",
+      "message": "queue entry 0 fetched chapter-work runtime snapshot 99009 with 1 questions and stopped fail-closed before any answer save or submit endpoint is called"
+    },
+    {
+      "event": "course_run_queue_entry_state_changed",
+      "course_id": 1001,
+      "queue_index": 0,
+      "state": "blocked"
+    },
+    {
+      "event": "course_run_execution_finished",
+      "course_id": 1001,
+      "state": "blocked",
+      "total_entries": 1,
+      "completed_entries": 0,
+      "blocked_entries": 1
+    }
+  ]
+}
