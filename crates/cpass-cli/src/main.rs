@@ -596,7 +596,6 @@ async fn run(cli: Cli) -> Result<()> {
 struct InteractiveAuthResult {
     selected_phone: String,
     client: ChaoxingClient,
-    account: cpass_core::AccountProfile,
 }
 
 enum InteractiveNextStep {
@@ -615,7 +614,6 @@ async fn launch_default_interactive(
     let Some(auth) = resolve_interactive_auth(&config, fixture_dir).await? else {
         return Ok(());
     };
-    print_account_summary(&auth.account)?;
     let searcher_pipeline = build_searcher_pipeline(
         &config.searchers,
         config_path.parent().unwrap_or(Path::new(".")),
@@ -659,18 +657,6 @@ fn print_interactive_banner() -> Result<()> {
     Ok(())
 }
 
-fn print_account_summary(account: &cpass_core::AccountProfile) -> Result<()> {
-    let mut stdout = io::stdout().lock();
-    writeln!(
-        stdout,
-        "当前账号: puid={} 姓名={} 手机号={} 学校={}",
-        account.puid, account.name, account.phone, account.school
-    )?;
-    writeln!(stdout)?;
-    stdout.flush()?;
-    Ok(())
-}
-
 async fn resolve_interactive_auth(
     config: &AppConfig,
     fixture_dir: Option<&Path>,
@@ -685,12 +671,11 @@ async fn resolve_interactive_auth(
 
     if sessions.len() == 1 {
         let selected_phone = sessions[0].account.phone.clone();
-        let (client, account) =
+        let (client, _account) =
             client_from_session(config, Some(selected_phone.as_str()), fixture_dir).await?;
         return Ok(Some(InteractiveAuthResult {
             selected_phone,
             client,
-            account,
         }));
     }
 
@@ -723,12 +708,11 @@ async fn resolve_interactive_auth(
         .get(index)
         .ok_or_else(|| CpassError::Validation(format!("session index {index} not found")))?;
     let selected_phone = session.account.phone.clone();
-    let (client, account) =
+    let (client, _account) =
         client_from_session(config, Some(selected_phone.as_str()), fixture_dir).await?;
     Ok(Some(InteractiveAuthResult {
         selected_phone,
         client,
-        account,
     }))
 }
 
@@ -776,7 +760,6 @@ async fn prompt_interactive_login(
                 return Ok(Some(InteractiveAuthResult {
                     selected_phone: account.phone.clone(),
                     client,
-                    account,
                 }));
             }
             Err(CpassError::LoginFailed(message)) => {
@@ -842,7 +825,6 @@ async fn prompt_interactive_qr_login(
                 return Ok(InteractiveAuthResult {
                     selected_phone: account.phone.clone(),
                     client,
-                    account,
                 });
             }
             QrLoginPollOutcome::Expired => {

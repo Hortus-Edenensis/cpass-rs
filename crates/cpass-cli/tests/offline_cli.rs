@@ -2270,7 +2270,6 @@ fn launches_default_tui_from_top_level_invocation() {
     let stdout = String::from_utf8(assert.get_output().stdout.clone()).expect("utf8 stdout");
     assert!(stdout.contains("cpass interactive launcher"));
     assert!(stdout.contains("Version:"));
-    assert!(stdout.contains("当前账号: puid=114514"));
     assert!(stdout.contains("课程列表:"));
     assert!(stdout.contains("输入课程序号 / 课程名 / course_id"));
     assert!(stdout.contains("cpass run TUI"));
@@ -2301,7 +2300,6 @@ fn top_level_launcher_supports_qr_login_flow() {
     assert!(stdout.contains("请使用学习通扫码登录："));
     assert!(stdout.contains("二维码内容 URL:"));
     assert!(stdout.contains("等待扫码确认..."));
-    assert!(stdout.contains("当前账号: puid=114514"));
     assert!(stdout.contains("cpass run TUI"));
 }
 
