@@ -22,6 +22,10 @@ Canonical filenames:
 - `exam_submit_save_<exam_id>_q<qid>.http`
 - `exam_submit_final_<exam_id>.http`
 
+If the reviewed session hits optional face/captcha gates before `start`, keep those artifacts in
+this directory too. Name them from the real observed branch/route after capture instead of
+inventing guessed filenames up front.
+
 ## Minimum expectations per artifact
 
 ### `exam_cover_<exam_id>.html`
@@ -84,7 +88,93 @@ Must capture one per-question save / temporary submit request and response, incl
 
 Must capture one final-submit request/response pair from the same reviewed session.
 
+## Optional challenge branches
+
+### Face gate
+
+When the cover metadata enables `faceRecognitionCompare`, also capture the reviewed face branch from
+the same session, including:
+
+- the request/response pairs the legacy flow actually used before `start`
+- any reviewed failure HTML/message for face mismatch or other face-entry rejection
+- the exact `faceDetection`, `facekey`, and `faceDetectionResult` values eventually sent to
+  `exam_start_success_<exam_id>.http`
+
+### Captcha gate
+
+When the cover metadata enables `captchaCheck` or provides `captchaCaptchaId`, also capture the
+reviewed captcha branch from the same session, including:
+
+- the challenge payload/page that exposes the captcha state
+- the verification request/response pair
+- the exact `captchavalidate` value eventually sent to `exam_start_success_<exam_id>.http`
+- the `code` value when the same reviewed branch still requires a manual exam code
+
+If both gates appear, preserve the real branch ordering from the reviewed session.
+
+## Sanitization rules
+
+Sanitization is allowed only if the session contract survives intact:
+
+- keep route paths, parameter keys, response structure, status codes, and redirect headers
+- replace secrets/PII with stable placeholders across the whole bundle when they are not needed to
+  model the protocol, including cookies, session tokens, device identifiers such as `imei`,
+  student-identifying fields, face images/blobs, captcha answers, raw exam-code values, and IP data
+- reuse the same placeholder when the same sensitive value appears again later in the session
+- do **not** redact the mutable exam/session fields that tie the bundle together:
+  - `examId`
+  - `courseId`
+  - `classId`
+  - `cpi`
+  - `testUserRelationId` / `examAnswerId`
+  - `testPaperId`
+  - `qid`
+  - `enc`
+  - `encRemainTime`
+  - `encLastUpdateTime`
+  - `remainTime`
+  - gate flags and the face/captcha outputs fed into `start`
+
+## Per-request metadata that must stay paired
+
+Every reviewed request/response artifact in this directory should preserve:
+
+- request step/order inside the same session
+- method
+- full URL / query
+- form body or equivalent request payload
+- response status
+- response content type
+- redirect target / `Location`, when present
+- the session identifiers shared across the bundle:
+  - `examId`
+  - `courseId`
+  - `classId`
+  - `cpi`
+  - `testUserRelationId` / `examAnswerId`
+- the mutable state carried forward between artifacts:
+  - `enc`
+  - `encRemainTime`
+  - `encLastUpdateTime`
+  - `remainTime`
+- question identifiers when present:
+  - `qid`
+  - `testPaperId`
+- gate/challenge fields when present:
+  - `needcode`
+  - `code`
+  - `faceRecognitionCompare`
+  - `faceDetection`
+  - `facekey`
+  - `faceDetectionResult`
+  - `captchaCheck`
+  - `captchaCaptchaId`
+  - `captchavalidate`
+
 ## Current status
 
 As of 2026-04-12 this directory is intentionally empty except for this README, because the repository
-still lacks a reviewed mutating runtime exam corpus.
+still lacks a reviewed mutating runtime exam corpus. The expanded 2026-04-12 audit across tracked
+files, git history, and local build/OMX artifacts found only the legacy Python reference, read-only
+docs/entry fixtures, and this placeholder/capture-contract surface; there is no checked-in `start` /
+question / answer-sheet / save / final-submit bundle to canonicalize yet.

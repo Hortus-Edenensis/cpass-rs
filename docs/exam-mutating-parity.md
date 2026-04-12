@@ -13,6 +13,25 @@ It exists because the repository's current approved exam coverage is still read-
 The repo does **not** yet contain a reviewed mutating runtime corpus for starting,
 answering, saving, or submitting an exam session.
 
+## Current blocker audit
+
+As of 2026-04-12, the repository still blocks mutating exam parity on missing reviewed runtime
+evidence rather than missing Rust-side parser or launcher plumbing:
+
+- repository-wide searches for `exam/phone/start`, `reVersionTestStartNew`, `loadAnswerStatic`, and
+  `reVersionSubmitTestNew` only find the legacy Python reference, checklist/contract/boundary docs,
+  and read-only exam-list fixtures that merely embed entry URLs; there are no checked-in `.http`,
+  `.html`, or `.json` mutating exam session artifacts for a started runtime flow on those routes
+- `git rev-list --all --objects` for the canonical fixture filenames
+  (`exam_start_success_*`, `exam_question_*_q0`, `exam_answer_sheet_*`, `exam_preview_live_*`,
+  `exam_submit_save_*`, `exam_submit_final_*`) still only reports the directory plus its README, so
+  git history has never carried a reviewed mutating runtime bundle either
+- local build / OMX artifact scans under `.omx/` and `target/` likewise do not contain a reviewed
+  start/question/answer-sheet/save/final-submit corpus that could be promoted into fixtures
+
+That leaves the next mutating-exam step unchanged: obtain one real reviewed same-session capture
+bundle first, then resume parser/runtime work in checklist order without guessing.
+
 ## Legacy execution contract
 
 Legacy source of truth:
@@ -226,6 +245,102 @@ For each captured request, preserve:
 
 If face or captcha is required, the bundle also needs the reviewed challenge artifacts and the
 exact payload fields fed into `start`.
+
+## Optional challenge branches
+
+When the reviewed exam cover turns on an entrance challenge, the bundle must keep that branch in
+the same session instead of pretending the `start` request was unconditional.
+
+### Face branch (`faceRecognitionCompare`)
+
+At minimum capture:
+
+- the cover-page flag that enabled the branch
+- every reviewed pre-start request/response pair the legacy flow actually used for face handling
+- any reviewed rejection HTML/message returned when face validation fails
+- the exact values eventually threaded into `start`, especially:
+  - `faceDetection`
+  - `facekey`
+  - `faceDetectionResult`
+
+### Captcha branch (`captchaCheck` / `captchaCaptchaId`)
+
+At minimum capture:
+
+- the cover-page flags that enabled the branch
+- the reviewed challenge payload/page that exposes the captcha id or challenge data
+- the verification request/response pair that produces the final start-ready captcha state
+- the exact values eventually threaded into `start`, especially:
+  - `captchavalidate`
+  - `code`, when the server still requires a manual exam code alongside captcha resolution
+
+If both challenge families appear for the same reviewed session, keep the real branch ordering from
+capture. Do not normalize the sequence by hand.
+
+## Sanitization rules for reviewed mutating fixtures
+
+The mutating bundle is allowed to be sanitized, but only in a way that preserves the protocol
+contract:
+
+- keep route paths, parameter keys, response structure, status codes, and redirect headers intact
+- replace sensitive values with stable placeholders across the whole bundle when they are not needed
+  to model the protocol, including cookies, session tokens, `imei`, other device identifiers,
+  student-identifying fields, face images/blobs, captcha answers, manual exam code values, and raw
+  IP/address data
+- if the same redacted value is reused across requests, reuse the same placeholder so reviewers can
+  still verify continuity
+- do **not** redact the mutable state fields that define the session contract:
+  - `examId`
+  - `testUserRelationId` / `examAnswerId`
+  - `testPaperId`
+  - `qid`
+  - `enc`
+  - `encRemainTime`
+  - `encLastUpdateTime`
+  - `remainTime`
+  - gate flags and the face/captcha outputs eventually posted into `start`
+- keep enough request metadata to explain contract-sensitive behavior, especially `User-Agent`,
+  `Referer`, request/response content type, and redirect `Location`; remove unrelated browser noise
+  only when it is clearly not consulted by the legacy flow
+
+## Per-request metadata that must stay paired with the same session
+
+Every request/response artifact in the reviewed bundle should record or preserve the fields that let
+Rust verify one coherent mutable session instead of a bag of unrelated payloads:
+
+- request step/order inside the session
+- method
+- full URL / query
+- form body or equivalent request payload
+- response status
+- response content type
+- redirect target / `Location`, when present
+- session identifiers:
+  - `examId`
+  - `courseId`
+  - `classId`
+  - `cpi`
+  - `testUserRelationId` / `examAnswerId`
+- mutable state carried forward from the previous step:
+  - `enc`
+  - `encRemainTime`
+  - `encLastUpdateTime`
+  - `remainTime`
+- question-specific identifiers when present:
+  - `qid`
+  - `testPaperId`
+- gate/challenge fields when present:
+  - `needcode`
+  - `code`
+  - `faceRecognitionCompare`
+  - `faceDetection`
+  - `facekey`
+  - `faceDetectionResult`
+  - `captchaCheck`
+  - `captchaCaptchaId`
+  - `captchavalidate`
+- any header/cookie placeholder whose sanitized value is intentionally reused later in the same
+  reviewed session
 
 ## Rust implementation gate after fixtures exist
 

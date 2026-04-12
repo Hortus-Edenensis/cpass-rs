@@ -544,7 +544,10 @@ mod tests {
     use std::collections::BTreeMap;
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static TEMP_CONFIG_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     #[derive(Default)]
     struct TestSecrets {
@@ -800,9 +803,10 @@ notifications:
             .duration_since(UNIX_EPOCH)
             .expect("system time")
             .as_nanos();
+        let counter = TEMP_CONFIG_COUNTER.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
-            "cpass-config-test-{}-{unique}.yml",
-            std::process::id()
+            "cpass-config-test-{}-{unique}-{counter}.yml",
+            std::process::id(),
         ));
         fs::write(&path, contents).expect("write temp config");
         path
