@@ -1,7 +1,10 @@
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 
 from dataclasses_json import config, dataclass_json
+
+from .utils import normalize_text
 
 
 class AccountSex(Enum):
@@ -80,6 +83,30 @@ class QuestionType(Enum):
     测评题 = 21
 
 
+SUPPORTED_QUESTION_TYPES = frozenset(
+    (QuestionType.单选题, QuestionType.多选题, QuestionType.填空题, QuestionType.判断题)
+)
+
+
+def parse_question_type(value: str | None, title: str) -> QuestionType:
+    try:
+        type_id = int(value)
+    except (TypeError, ValueError):
+        for question_type in QuestionType:
+            if re.search(
+                r"^(?:\d+\s*[.．、]\s*)?[（(【\[]?\s*"
+                + re.escape(question_type.name)
+                + r"(?=$|[\s（(）)【\[】\],，:：])",
+                normalize_text(title),
+            ):
+                return question_type
+        return QuestionType.其它
+    try:
+        return QuestionType(type_id)
+    except ValueError:
+        return QuestionType.其它
+
+
 @dataclass_json
 @dataclass
 class QuestionModel:
@@ -89,6 +116,37 @@ class QuestionModel:
     type: QuestionType = field(metadata=config(encoder=lambda x: x.value))  # 题目类型
     options: dict[str, str] | list[str] = None  # 选项或填空
     answer: str | list[str] | bool = None  # 答案
+
+
+def is_valid_answer(question: QuestionModel) -> bool:
+    answer = question.answer
+    match question.type:
+        case QuestionType.单选题:
+            return (
+                isinstance(question.options, dict)
+                and isinstance(answer, str)
+                and answer in question.options
+            )
+        case QuestionType.多选题:
+            return (
+                isinstance(question.options, dict)
+                and isinstance(answer, str)
+                and bool(answer)
+                and len(set(answer)) == len(answer)
+                and all(key in question.options for key in answer)
+            )
+        case QuestionType.判断题:
+            return type(answer) is bool
+        case QuestionType.填空题:
+            return (
+                isinstance(question.options, list)
+                and bool(question.options)
+                and isinstance(answer, list)
+                and len(answer) == len(question.options)
+                and all(isinstance(value, str) and bool(normalize_text(value)) for value in answer)
+            )
+        case _:
+            return False
 
 
 class QuestionsExportType(Enum):

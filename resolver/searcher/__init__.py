@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from cxapi.schema import QuestionModel
 from logger import Logger
@@ -13,7 +12,7 @@ class SearcherResp:
     message: str  # 错误信息
     searcher: "SearcherBase"  # 搜索器对象
     question: str  # 源题干信息
-    answer: Optional[str]  # 答案
+    answer: str | list[str] | bool | int | None  # 答案
 
     def __repr__(self) -> str:
         return f"SearchResp(code={self.code}, message={self.message}, searcher={self.searcher}, question={self.question}, answer={self.answer})"
@@ -64,8 +63,21 @@ class MultiSearcherWraper:
         """
         if not self.slot:
             raise RuntimeError("至少需要加载一个搜索器")
-        result = [searcher.invoke(question) for searcher in self.slot]
-        self.logger.info(f"搜索器调用成功 (共 {len(result)} 个结果)")
+        result = []
+        for searcher in self.slot:
+            try:
+                result.append(searcher.invoke(question))
+            except Exception as err:
+                result.append(
+                    SearcherResp(
+                        -500,
+                        f"搜索器调用失败 ({type(err).__name__})",
+                        searcher,
+                        question.value,
+                        None,
+                    )
+                )
+        self.logger.info(f"搜索器调用完成 (共 {len(result)} 个结果)")
         self.logger.debug(f"搜索器 Req={question} Rsp={result}")
         return result
 
