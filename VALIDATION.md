@@ -10,8 +10,14 @@
 | Rust CLI/HTTP integration | 本机 Rust 1.97.1 | 31 项通过 | 真实 localhost 请求、失败回执、动态考试参数、CLI、批量恢复、路径别名、离线零通知 |
 | Python unittest | Python 3.10 | 35 项通过，0.303 秒 | 保留 Python 严格解析基线，离线 HTML/模拟搜索器/DTO |
 | Python unittest | Python 3.11 | 35 项通过，0.258 秒 | 同一 Python 回归模块在第二个受支持版本运行 |
+| Python 格式 | black；isort black profile、line length 100 | 11 个改动文件通过 | 与项目 black 的 100 列约定一致 |
+| 原生 release | macOS arm64，Rust 1.97.1 | 构建及 6 项 CLI 冒烟通过 | help、配置、作业/考试解析、未完成答案退出码、TUI 退出 |
+| Docker | 本机 Linux arm64 与 GitHub Linux x64 | 构建及无网络冒烟通过 | help、配置、文件读写、本地匹配、真实 Tesseract 固定图片提示 |
+| GitHub CI | Linux/macOS/Windows stable 与 Linux 1.88.0 | fmt/clippy/test/release 全部通过 | 锁定依赖、最低版本、三个系统的 CLI/HTTP 回归和二进制构建 |
 
-以上结果为本轮主执行器取得的运行结果。库测试通过不代替 CLI/HTTP 集成和在线平台验收。OCR 测试使用可控本地替代进程验证超时及输出边界，不能证明 Tesseract 对真实验证码的识别准确率。
+以上结果为本轮实际运行结果。已验证 Rust 源码提交 `391861dcb523a66611bbf3b298eca6541bccb73c`；[四组 CI](https://github.com/Hortus-Edenensis/cpass-rs/actions/runs/37045015755) 和 [容器 CI](https://github.com/Hortus-Edenensis/cpass-rs/actions/runs/37045015736) 均成功。Unix 库测试 61 项，Windows 的本地 shell OCR 进程测试因平台条件跳过；CLI/HTTP 集成均为 31 项。
+
+OCR 单元测试使用可控替代进程验证超时；容器另以真实 Tesseract 5.3.0 识别固定 `CPASS 12345` 图片并要求人工确认。固定图片成功不能证明真实验证码识别准确率，也不表示平台接受验证。
 
 ## 最终检查清单
 
@@ -21,12 +27,12 @@
 | `cargo test --locked` | 通过：61 库 + 31 集成，文档测试 0 | 最终源码回归通过 |
 | `cargo fmt --all --check` | 通过 | 最终源码无格式差异 |
 | `cargo clippy --locked --all-targets -- -D warnings` | 通过 | 最终源码无警告 |
-| `cargo build --release --locked` | 待最终结果 | 最终源码 release 构建成功 |
-| release CLI help/config/离线解析/恢复/TUI smoke | 待最终确认 | 示例命令参数有效，预期退出码和输出字段符合合同 |
-| Python 改动文件格式检查 | 待最终确认 | 改动的 Python 文件符合项目格式工具 |
-| Rust 1.88 最低版本 | CI 已加入 1.88.0，实际编译待验 | 锁定依赖及源码在 1.88 编译和回归通过；本机 1.97.1 通过不能代替 |
-| Docker 构建与运行 | 待实跑证据 | 镜像构建成功；help、配置及离线流程可用，挂载可持久化 |
-| Linux/macOS/Windows GitHub CI | 已配置，三平台运行待验 | 每个平台 fmt/clippy/test/release 全通过，产物可下载 |
+| `cargo build --release --locked` | 本机与四组 CI 通过 | release 构建成功 |
+| release CLI help/config/离线解析/TUI smoke | 本机 6 项通过；跨平台发布步骤复用同样入口 | 预期退出码和输出字段符合合同；批量恢复由 31 项集成中的真实 CLI 检查覆盖 |
+| Python 改动文件格式检查 | black/isort 通过，11 个文件 | isort 使用 black profile 与项目 100 列约定 |
+| Rust 1.88 最低版本 | Linux 1.88.0 CI 全部通过 | 锁定依赖及源码在 1.88 编译和回归通过 |
+| Docker 构建与运行 | 本机及 GitHub CI 通过 | 无网络容器 help、配置、离线文件读写和 OCR 成功 |
+| Linux/macOS/Windows GitHub CI | 全部通过并上传产物 | 每个平台 fmt/clippy/test/release 全通过 |
 | 真实平台 M6 | 待测试会话与明确执行范围 | 按 ROADMAP M6 每项保留真实回执与客户端对照 |
 
 ## 可复现命令

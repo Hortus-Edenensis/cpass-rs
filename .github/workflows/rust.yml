@@ -28,6 +28,11 @@ jobs:
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked
       - run: cargo build --locked --release
+      - name: Release CLI smoke
+        run: |
+          cargo run --locked --release -- --help
+          cargo run --locked --release -- config-check
+          cargo run --locked --release -- parse --kind work --input tests/fixtures/work_questions.html
       - name: Package Unix binary
         if: runner.os != 'Windows'
         run: |

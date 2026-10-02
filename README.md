@@ -159,6 +159,8 @@ notifications:
 
 通知默认关闭，设置 `enabled: true` 后启用所配置的服务。Gotify 使用 HTTPS（本机测试可用 HTTP），token 从指定环境变量读入请求头，以有效消息 ID 确认接受。MQTT 当前实现 MQTT 3.1.1 的 `mqtt://` QoS 1，需要匹配的 PUBACK；没有原生 `mqtts://`，TLS 请通过本地代理接入。明文连接必须显式 `allow_plaintext: true`，带凭据只允许回环地址；凭据不写 broker URL。通知确认仅表示服务接受事件，不表示用户已看到。
 
+`parse/resolve/resources/review-export/review/ocr` 只记录本地事件，不发送通知。资源下载和主观题搜索仍分别需要显式 `--download`、`--suggest`。
+
 ## 搜索器与兼容
 
 保留配置名称：`jsonFileSearcher`、`sqliteSearcher`、`restApiSearcher`、`JsonApiSearcher`、`enncySearcher`、`cxSearcher`、`TiKuHaiSearcher`、`LyCk6Searcher`、`MukeSearcher`、`LemonSearcher`、`OpenAISearcher`、`OllamaSearcherAPI`。名称大小写兼容。

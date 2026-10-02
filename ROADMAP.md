@@ -35,9 +35,9 @@
 | 批量/TUI | 多课程顺序执行、checkpoint 校验、平台状态复核、文本菜单 | CLI/集成回归待最终汇总 | 中断重启不凭旧 checkpoint 误报完成 |
 | 直播/文章 | 官方链接与人工观看/阅读接续，重新拉取卡片确认 | 新旧状态 fixture、拒绝伪造回执 | 真人操作后任务点 fresh 回执完成 |
 | 主观题 | 人工审核材料，可选搜索草稿 | 字段与禁止自动提交检查 | 人工判断正确性；没有自动答题/提交 |
-| OCR | 外部 Tesseract 有界进程、人工确认提示 | 模拟进程、超时、格式检查 | 本机实际 OCR 与人工核对 |
+| OCR | 外部 Tesseract 有界进程、人工确认提示 | 模拟进程/超时；容器真实 Tesseract 固定图片 | 真实验证码识别及人工核对 |
 | 诊断/通知 | 脱敏 JSONL、轮转/保留、诊断白名单、Gotify/MQTT QoS 1 | 本地 HTTP/TCP 接收回执、诊断过滤 | 自有通知服务接收；敏感信息不进入事件 |
-| 构建/交付 | Cargo.lock、Rust Docker、跨平台 CI、二进制打包 | 本机构建；CI 配置审查 | GitHub 三平台构建与容器实跑 |
+| 构建/交付 | Cargo.lock、Rust Docker、跨平台 CI、二进制打包 | 本机 release、Docker 与三平台/最低版本 CI 已通过 | 按实际平台另验登录、任务点和提交 |
 
 ## M0：冻结规则与可复现基线（本轮）
 
@@ -150,7 +150,7 @@
 | 图片/公式导出 | `resources::extract/download`；`resources` 与 `work-export` | 库测试已测图片/MathML/TeX、选项定位、冲突题号、域名限制 | 待验：真实 HTML 资源关联及可下载图片；manifest 与 QuestionSet 分离，下载须明确 `--download` |
 | 已批阅只读导出 | `resources::parse_review`、`Work::fetch_review`；`review-export/work-export --reviewed` | 合成 HTML 已测独立标签、解释隔离、答案为空值边界 | 待真实 HTML：提交答案、标准答案、得分逐项与平台核对；缺字段不猜，不将标准答案作为提交候选 |
 | 可选文本 TUI | `tui`；登录、账户、课程、章节、任务、执行与考试列表复用 CLI | 菜单与 EOF/错误接续集成待最终汇总 | 待交互验收：写入与最终交作业分别确认，不复制考试状态机 |
-| 本地 OCR | `operations::ocr_hint`；`ocr --image …`；配置 executable/language/timeout | 库测试已测 PNG/JPEG、有限输出、超时清理与人工确认标志 | 待验：安装 Tesseract 后实际识别，用户核对后另行验证码提交；OCR 输出本身不证明验证通过 |
+| 本地 OCR | `operations::ocr_hint`；`ocr --image …`；配置 executable/language/timeout | 库测试已测 PNG/JPEG、有限输出、超时清理；真实容器已识别固定图片并要求人工确认 | 待验：真实验证码识别，用户核对后另行提交；OCR 输出本身不证明验证通过 |
 | 主观题辅助 | `review --input … [--suggest]`；只整理既有类型 4/5/6/7/9/10 | 实现已落地；CLI 草稿/禁止提交回归待最终汇总 | 人工审核材料与建议；不扩展四题型有效答案规则、不自动提交、不声明平台正确 |
 | Gotify 通知 | 独立 HTTP 客户端、HTTPS、请求头环境变量 token、有效消息 ID 回执 | 库测试已测本地请求、敏感字段隔离与无效回执 | 待自有服务验收：服务接受事件可核查；失败不影响任务报告 |
 | MQTT 通知 | `mqtt://` MQTT 3.1.1、QoS 1、匹配 PUBACK；环境变量凭据 | 库测试已测 CONNECT/PUBLISH/PUBACK 与失败隔离 | 待自有代理/服务验收：仅明示明文 opt-in；凭据仅回环地址，TLS 通过本地代理，无原生 mqtts 支持 |
@@ -176,9 +176,9 @@
 | M2 | 已实现 | 登录/会话/签名/人工挑战离线检查 | 真实账号及风控接续 |
 | M3 | 已实现 | 课程/任务/媒体库测试和本地协议 fixture | 平台实际任务点与 fresh 回执 |
 | M4 | 已实现 | 作业缓存/提交守卫与考试边界代码及回归 | 完整 HTTP 集成最终结果；授权真实作业/考试 |
-| M5 | 已实现 | 搜索源/配置库测试；Cargo/Docker/CI 文件 | 最终 fmt/clippy/release、Docker 实跑、三平台 CI |
+| M5 | 已实现并离线验证 | 搜索源/配置、fmt/clippy/release、Docker、三平台和最低版本 CI 已通过 | 第三方与自有服务现网验收 |
 | M6 | 待真实平台验收 | 离线验收标准已确定 | 测试会话、明确可执行课程/作业/考试范围和平台回执 |
-| M7 | 已实现 | 上表库测试证据 | 上表 CLI 集成及真实 OCR/批阅/通知等验收 |
+| M7 | 已实现并离线验证 | 库与 CLI 集成通过；真实 OCR 固定图片通过 | 真实短信/批阅/通知、真人观看阅读接续与验证码识别率 |
 
 这些状态以当前证据为准；新增构建或在线结果应更新 [VALIDATION.md](VALIDATION.md)，不能仅改完成标记。
 
