@@ -55,6 +55,8 @@ pub struct Event {
     pub matched: usize,
     pub submitted: usize,
     pub incomplete: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notification: Option<NotificationReceipt>,
 }
 
 impl Event {
@@ -75,6 +77,7 @@ impl Event {
             matched: 0,
             submitted: 0,
             incomplete: 0,
+            notification: None,
         }
     }
 }
@@ -174,9 +177,26 @@ pub struct MqttConfig {
     pub allow_plaintext: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum NotificationProvider {
+    Gotify,
+    Mqtt,
+}
+
+impl std::fmt::Display for NotificationProvider {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Gotify => "gotify",
+            Self::Mqtt => "mqtt",
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NotificationReceipt {
-    pub provider: &'static str,
+    pub provider: NotificationProvider,
     pub accepted: bool,
     pub error: Option<ErrorCode>,
 }
@@ -194,10 +214,10 @@ pub fn notify(config: &NotificationConfig, event: &Event) -> Vec<NotificationRec
         });
     };
     if let Some(gotify) = &config.gotify {
-        record("gotify", send_gotify(gotify, event));
+        record(NotificationProvider::Gotify, send_gotify(gotify, event));
     }
     if let Some(mqtt) = &config.mqtt {
-        record("mqtt", send_mqtt(mqtt, event));
+        record(NotificationProvider::Mqtt, send_mqtt(mqtt, event));
     }
     receipts
 }
@@ -559,6 +579,41 @@ mod tests {
         }
     }
 
+    #[test]
+    fn notification_event_schema_accepts_old_logs_and_rejects_untrusted_fields() {
+        let old_event = serde_json::to_value(event()).unwrap();
+        assert!(old_event.get("notification").is_none());
+        assert!(
+            serde_json::from_value::<Event>(old_event.clone())
+                .unwrap()
+                .notification
+                .is_none()
+        );
+        for provider in [NotificationProvider::Gotify, NotificationProvider::Mqtt] {
+            let mut event = event();
+            event.notification = Some(NotificationReceipt {
+                provider,
+                accepted: true,
+                error: None,
+            });
+            let mut value = serde_json::to_value(event).unwrap();
+            assert_eq!(
+                serde_json::from_value::<Event>(value.clone())
+                    .unwrap()
+                    .notification
+                    .unwrap()
+                    .provider,
+                provider
+            );
+            value["notification"]["token"] = "PRIVATE_TOKEN".into();
+            assert!(serde_json::from_value::<Event>(value).is_err());
+        }
+        let mut untrusted = old_event;
+        untrusted["notification"] =
+            serde_json::json!({"provider":"PRIVATE_PROVIDER","accepted":true,"error":null});
+        assert!(serde_json::from_value::<Event>(untrusted).is_err());
+    }
+
     fn mqtt_read(stream: &mut TcpStream) -> (u8, Vec<u8>) {
         stream
             .set_read_timeout(Some(Duration::from_secs(5)))
@@ -727,6 +782,22 @@ mod tests {
         let hint = ocr_hint(&config, &image).unwrap();
         assert_eq!(hint.text, "A1b2");
         assert!(hint.requires_confirmation);
+        let jpeg = dir.0.join("captcha.jpg");
+        fs::write(&jpeg, b"\xff\xd8\xfffixture").unwrap();
+        let hint = ocr_hint(&config, &jpeg).unwrap();
+        assert_eq!(hint.text, "A1b2");
+        assert!(hint.requires_confirmation);
+        fs::write(
+            &executable,
+            "#!/bin/sh\nprintf 'A1b2'\ndd if=/dev/zero bs=17000 count=1 2>/dev/null | tr '\\000' ' '\n",
+        )
+        .unwrap();
+        assert!(
+            ocr_hint(&config, &image)
+                .unwrap_err()
+                .to_string()
+                .contains("超限")
+        );
         fs::write(&executable, "#!/bin/sh\nexec sleep 5\n").unwrap();
         let started = Instant::now();
         assert!(

@@ -74,7 +74,7 @@ impl Task {
         }
         self.point().is_some_and(|p| {
             p.get("isPassed") == Some(&Value::Bool(true))
-                || p.get("job") == Some(&Value::Bool(false))
+                || (self.kind != TaskKind::Video && p.get("job") == Some(&Value::Bool(false)))
         })
     }
 }
@@ -242,7 +242,7 @@ pub fn chapter_tasks(
             continue;
         }
         let attachment = if frames.iter().any(|(kind, _)| *kind != TaskKind::Unknown) {
-            let html = session
+            session
                 .get(
                     "https://mooc1-api.chaoxing.com/knowledge/cards",
                     &[
@@ -254,19 +254,30 @@ pub fn chapter_tasks(
                         ("control".into(), "true".into()),
                         ("cpi".into(), course.cpi.to_string()),
                     ],
-                )?
-                .text()?;
-            parse_attachment(&html)?
+                )
+                .and_then(|response| response.text())
+                .map_err(|_| "card attachment request failed")
+                .and_then(|html| {
+                    parse_attachment(&html).map_err(|_| "card attachment parsing failed")
+                })
         } else {
-            Value::Null
+            Ok(Value::Null)
         };
         for (kind, property) in frames {
+            let (kind, property, attachment) = match &attachment {
+                Ok(attachment) => (kind, property, attachment.clone()),
+                Err(reason) => (
+                    TaskKind::Unknown,
+                    serde_json::json!({"frame":property,"task_kind":kind,"parse_error":reason}),
+                    Value::Null,
+                ),
+            };
             tasks.push(Task {
                 kind,
                 card_index,
                 chapter_id: chapter.id,
                 course: course.clone(),
-                attachment: attachment.clone(),
+                attachment,
                 property,
             });
         }
@@ -418,6 +429,154 @@ mod tests {
             task.attachment =
                 json!({"attachments":[{"property":{"vdoid":null,"mid":null},"isPassed":true}]});
             assert!(task.point().is_none());
+        }
+    }
+
+    #[test]
+    fn video_requires_explicit_passed_receipt_even_without_active_job() {
+        let mut task = Task {
+            kind: TaskKind::Video,
+            card_index: 0,
+            chapter_id: 1,
+            course: Course {
+                id: 1,
+                class_id: 2,
+                cpi: 3,
+                key: 4,
+                name: String::new(),
+                teacher: String::new(),
+            },
+            property: json!({"objectid":"obj"}),
+            attachment: json!({"attachments":[{"property":{"objectid":"obj"},"job":false}]}),
+        };
+        assert!(!task.already_complete());
+        for passed in [json!(false), json!("true"), json!(1), Value::Null] {
+            task.attachment["attachments"][0]["isPassed"] = passed;
+            assert!(!task.already_complete());
+        }
+        task.attachment["attachments"][0]["isPassed"] = json!(true);
+        assert!(task.already_complete());
+        task.attachment["attachments"][0]["isPassed"] = json!(false);
+        task.kind = TaskKind::Document;
+        assert!(task.already_complete());
+        task.kind = TaskKind::Work;
+        task.property = json!({"_jobid":"job1"});
+        task.attachment["attachments"][0]["jobid"] = json!("job1");
+        assert!(task.already_complete());
+    }
+
+    #[test]
+    fn bad_card_preserves_previous_and_following_tasks() {
+        use std::{
+            io::{Read, Write},
+            net::TcpListener,
+            thread,
+            time::{Duration, Instant},
+        };
+        for (bad_status, expected_reason) in [
+            ("200 OK", "card attachment parsing failed"),
+            ("503 Service Unavailable", "card attachment request failed"),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let session = Session::new(
+                2,
+                0,
+                Some(&format!("http://{}", listener.local_addr().unwrap())),
+            )
+            .unwrap();
+            let cards = (0..3).map(|i| json!({"description":format!("<iframe module='insertvideo' data='{{\"objectid\":\"obj{i}\"}}'></iframe>")})).collect::<Vec<_>>();
+            let good = |i| {
+                format!(
+                    "<script>window.AttachmentSetting={};</script>",
+                    json!({"defaults":{},"attachments":[{"property":{"objectid":format!("obj{i}")},"isPassed":true}]})
+                )
+            };
+            let replies = [
+                (
+                    "200 OK",
+                    json!({"data":[{"card":{"data":cards}}]}).to_string(),
+                ),
+                ("200 OK", good(0)),
+                (bad_status, "<html>private-response-marker</html>".into()),
+                ("200 OK", good(2)),
+            ];
+            let server = thread::spawn(move || {
+                let mut requests = Vec::new();
+                for (status, body) in replies {
+                    let deadline = Instant::now() + Duration::from_secs(5);
+                    let mut stream = loop {
+                        match listener.accept() {
+                            Ok((stream, _)) => break stream,
+                            Err(e)
+                                if e.kind() == std::io::ErrorKind::WouldBlock
+                                    && Instant::now() < deadline =>
+                            {
+                                thread::sleep(Duration::from_millis(5))
+                            }
+                            Err(e) => panic!("fixture accept failed: {e}"),
+                        }
+                    };
+                    stream.set_nonblocking(false).unwrap();
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(2)))
+                        .unwrap();
+                    let mut request = Vec::new();
+                    while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                        let mut buf = [0; 2048];
+                        let n = stream.read(&mut buf).unwrap();
+                        assert!(n > 0);
+                        request.extend_from_slice(&buf[..n]);
+                    }
+                    requests.push(String::from_utf8(request).unwrap());
+                    write!(stream, "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                }
+                requests
+            });
+            let course = Course {
+                id: 1,
+                class_id: 2,
+                cpi: 3,
+                key: 4,
+                name: String::new(),
+                teacher: String::new(),
+            };
+            let chapter = Chapter {
+                id: 7,
+                label: "1".into(),
+                name: String::new(),
+                total: 3,
+                finished: 0,
+                status: String::new(),
+            };
+            let tasks = chapter_tasks(&session, &course, &chapter, 9).unwrap();
+            let requests = server.join().unwrap();
+            assert_eq!(tasks.len(), 3);
+            assert_eq!(
+                tasks.iter().map(|t| t.kind).collect::<Vec<_>>(),
+                [TaskKind::Video, TaskKind::Unknown, TaskKind::Video]
+            );
+            assert!(tasks[0].already_complete() && tasks[2].already_complete());
+            assert!(!tasks[1].already_complete());
+            for (index, task) in tasks.iter().enumerate() {
+                assert_eq!(task.card_index, index);
+                assert_eq!(task.chapter_id, 7);
+                assert_eq!(task.course.id, 1);
+            }
+            assert_eq!(tasks[1].property["frame"], json!({"objectid":"obj1"}));
+            assert_eq!(tasks[1].property["parse_error"], expected_reason);
+            assert_eq!(tasks[1].property["task_kind"], "Video");
+            assert!(
+                !serde_json::to_string(&tasks)
+                    .unwrap()
+                    .contains("private-response-marker")
+            );
+            assert_eq!(requests.len(), 4);
+            assert!(requests[0].starts_with("GET /gas/knowledge?"));
+            for (index, request) in requests[1..].iter().enumerate() {
+                assert!(request.starts_with("GET /knowledge/cards?"));
+                assert!(request.contains(&format!("&num={index}&")));
+            }
         }
     }
 }

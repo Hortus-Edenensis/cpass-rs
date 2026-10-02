@@ -57,12 +57,34 @@ fn render(
         return;
     }
     let name = node.value().name();
+    // Flattening a formula can make distinct questions or options identical.
+    if name == "math" {
+        out.push_str(&node.html());
+        return;
+    }
+    if name == "script"
+        && node.value().attr("type").is_some_and(|kind| {
+            kind.split(';')
+                .next()
+                .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("math/tex"))
+        })
+    {
+        out.push_str(r"\(");
+        out.extend(node.text());
+        out.push_str(r"\)");
+        return;
+    }
     if matches!(name, "script" | "style" | "input" | "button") || (skip_heading && name == "h3") {
         return;
     }
     if name == "br" {
         out.push('\n');
         return;
+    }
+    match name {
+        "sup" => out.push_str("^{"),
+        "sub" => out.push_str("_{"),
+        _ => {}
     }
     let block = matches!(name, "p" | "div" | "li");
     if block {
@@ -80,6 +102,9 @@ fn render(
     }
     if block {
         out.push('\n');
+    }
+    if matches!(name, "sup" | "sub") {
+        out.push('}');
     }
 }
 fn text(node: ElementRef<'_>) -> String {
@@ -801,6 +826,66 @@ mod tests {
         )
         .unwrap();
         assert!(extra.parse_errors.contains_key(&1));
+    }
+
+    fn formula_question(body: &str, options: [&str; 2]) -> Question {
+        let html = format!(
+            r#"<input id="totalQuestionNum" value="1"><div class="Py-mian1">
+            <input id="answertype42" value="0"><div class="Py-m1-title">{body}</div>
+            <li class="more-choose-item"><em class="choose-opt" id-param="A">A.</em><div class="choose-desc">{}</div></li>
+            <li class="more-choose-item"><em class="choose-opt" id-param="B">B.</em><div class="choose-desc">{}</div></li>
+            </div>"#,
+            options[0], options[1]
+        );
+        let mut paper = parse_page(&html, PageKind::Work).unwrap();
+        assert!(paper.parse_errors.is_empty(), "{:?}", paper.parse_errors);
+        paper.questions.remove(0)
+    }
+
+    #[test]
+    fn superscript_and_subscript_do_not_match_plain_concatenated_text() {
+        let q = formula_question("计算x<sup>2</sup>+x<sub>2</sub>", ["x<sup>2</sup>", "x2"]);
+        assert_eq!(q.value, "计算x^{2}+x_{2}");
+        assert_ne!(normalize_text(&q.value), normalize_text("计算x2+x2"));
+        assert_eq!(normalize_answer(&q, &json!("x^{2}")), Some(json!("A")));
+        assert_eq!(normalize_answer(&q, &json!("x2")), Some(json!("B")));
+        assert_eq!(normalize_answer(&q, &json!("x_{2}")), None);
+        let q = formula_question("x<sub>i<sup>2</sup></sub>", ["x<sub>2</sub>", "x2"]);
+        assert_eq!(q.value, "x_{i^{2}}");
+        assert_eq!(normalize_answer(&q, &json!("x_{2}")), Some(json!("A")));
+    }
+
+    #[test]
+    fn mathml_structure_and_tex_survive_body_and_option_parsing() {
+        let fraction = "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>";
+        let product = "<math><mrow><mi>a</mi><mi>b</mi></mrow></math>";
+        let q = formula_question(fraction, [fraction, product]);
+        assert!(q.value.contains("<mfrac><mi>a</mi><mi>b</mi></mfrac>"));
+        assert_ne!(normalize_text(&q.value), "ab");
+        assert_ne!(q.options["A"], q.options["B"]);
+        assert_eq!(normalize_answer(&q, &q.options["A"]), Some(json!("A")));
+        assert_eq!(normalize_answer(&q, &q.options["B"]), Some(json!("B")));
+        assert_eq!(normalize_answer(&q, &json!("ab")), None);
+        let tex = r#"<script type="math/tex; mode=display">\frac{a}{b}</script>"#;
+        let q = formula_question(
+            tex,
+            [tex, r#"<script type="math/tex">\frac{b}{a}</script>"#],
+        );
+        assert_eq!(q.value, r"\(\frac{a}{b}\)");
+        assert_eq!(
+            normalize_answer(&q, &json!(r"\(\frac{a}{b}\)")),
+            Some(json!("A"))
+        );
+        assert_eq!(
+            normalize_answer(&q, &json!(r"\(\frac{b}{a}\)")),
+            Some(json!("B"))
+        );
+        assert_eq!(normalize_answer(&q, &json!("ab")), None);
+        let q = formula_question(
+            "题干<script>untrusted()</script><script type='math/tex-not'>hidden</script>",
+            ["甲", "乙"],
+        );
+        assert_eq!(q.value, "题干");
     }
 
     #[test]

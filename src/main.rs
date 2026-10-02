@@ -398,8 +398,13 @@ fn run_course(
         .iter()
         .filter(|c| chapter_id.is_none_or(|id| id == c.id))
     {
-        if action.commit {
-            course::refresh_chapter(session, course, chapter.id)?;
+        if action.commit
+            && let Err(error) = course::refresh_chapter(session, course, chapter.id)
+        {
+            task_errors = true;
+            outcomes
+                .push(json!({"chapter":chapter.id,"status":"未完成","reason":error.to_string()}));
+            continue;
         }
         let tasks = match course::chapter_tasks(session, course, chapter, uid) {
             Ok(t) => t,
@@ -446,9 +451,13 @@ fn run_course(
                                     ))),
                             )?;
                         }
-                        Ok(
-                            json!({"report":report,"questions":workflow::exported(&paper,task.property["workid"].clone(),1)}),
-                        )
+                        let mut result = json!({"report":report,"questions":workflow::exported(&paper,task.property["workid"].clone(),1)});
+                        if !action.commit || !config.work.enable {
+                            result["status"] = json!("未完成");
+                            result["reason"] = json!("任务写入未启用");
+                            result["action_required"] = json!(true);
+                        }
+                        Ok(result)
                     }
                     course::TaskKind::Video if action.commit && config.video.enable => {
                         media::run_video(
@@ -464,7 +473,7 @@ fn run_course(
                     }
                     course::TaskKind::Live => media::run_live(session, &task),
                     course::TaskKind::Article => media::run_article(session, &task),
-                    _ => Ok(json!({"status":"未执行","reason":"任务写入未启用"})),
+                    _ => bail!("任务写入未启用，保持未完成"),
                 }
             })();
             let failed = match &outcome {
@@ -1087,6 +1096,17 @@ fn event_log(config: &Config, event: &operations::Event, notify: bool) {
         if !receipt.accepted {
             eprintln!("{} 通知未确认接受", receipt.provider);
         }
+        let mut notification_event = operations::Event::new(
+            operations::Stage::Notify,
+            if receipt.accepted {
+                operations::Outcome::Succeeded
+            } else {
+                operations::Outcome::Failed
+            },
+            receipt.error,
+        );
+        notification_event.notification = Some(receipt);
+        event_log(config, &notification_event, false);
     }
 }
 
