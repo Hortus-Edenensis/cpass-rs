@@ -646,6 +646,217 @@ mod tests {
     use super::*;
 
     #[test]
+    fn transport_timeouts_bound_get_retries_and_never_replay_exam_start() {
+        use std::net::TcpListener;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Instant;
+
+        for no_redirect in [false, true] {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let base = format!("http://{}", listener.local_addr().unwrap());
+            listener.set_nonblocking(true).unwrap();
+            let stop = Arc::new(AtomicBool::new(false));
+            let server_stop = stop.clone();
+            let server = std::thread::spawn(move || {
+                let mut connections = Vec::new();
+                loop {
+                    match listener.accept() {
+                        Ok((mut stream, _)) => {
+                            stream.set_nonblocking(false).unwrap();
+                            stream
+                                .set_read_timeout(Some(Duration::from_secs(10)))
+                                .unwrap();
+                            let mut request = Vec::new();
+                            let mut buffer = [0; 4096];
+                            while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+                                let count = stream.read(&mut buffer).unwrap();
+                                assert!(count > 0);
+                                request.extend_from_slice(&buffer[..count]);
+                            }
+                            assert!(request.starts_with(b"GET /exam-start?"));
+                            // Keep each socket open without headers so the client deadline fires.
+                            connections.push(stream);
+                        }
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                            if server_stop.load(Ordering::Relaxed) {
+                                break connections.len();
+                            }
+                            std::thread::sleep(Duration::from_millis(5));
+                        }
+                        Err(error) => panic!("local timeout fixture failed: {error}"),
+                    }
+                }
+            });
+            let session = Session::new(1, 2, Some(&base)).unwrap();
+            let start = Instant::now();
+            let params = [("token".into(), "PRIVATE_TIMEOUT_TOKEN".into())];
+            let result = if no_redirect {
+                session.get_no_redirect("https://mooc1.chaoxing.com/exam-start", &params)
+            } else {
+                session.get("https://mooc1.chaoxing.com/exam-start", &params)
+            };
+            stop.store(true, Ordering::Relaxed);
+            let requests = server.join().unwrap();
+            assert_eq!(requests, if no_redirect { 1 } else { 3 });
+            assert!(start.elapsed() < Duration::from_secs(30));
+            let error = result.err().unwrap().to_string();
+            assert!(error.contains("outcome is unconfirmed"));
+            assert!(!error.contains("PRIVATE_TIMEOUT_TOKEN"));
+        }
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        drop(listener);
+        let session = Session::new(1, 2, Some(&base)).unwrap();
+        let started = Instant::now();
+        assert!(
+            session
+                .get("https://mooc1.chaoxing.com/refused", &[])
+                .is_err()
+        );
+        assert!(started.elapsed() >= Duration::from_millis(700));
+        assert!(started.elapsed() < Duration::from_secs(30));
+    }
+
+    #[test]
+    fn legacy_session_load_is_scoped_and_expired_roundtrip_cookies_are_not_sent() {
+        let path = std::env::temp_dir().join(format!(
+            "cpass-legacy-test-{:016x}.json",
+            rand::random::<u64>()
+        ));
+        for legacy in [
+            json!({"ck":"UID=123; token=PRIVATE_LEGACY_TOKEN"}),
+            json!({"ck":{"UID":"123","token":"PRIVATE_LEGACY_TOKEN"}}),
+        ] {
+            fs::write(&path, legacy.to_string()).unwrap();
+            let (base, server) = test_server(vec![("", b"{}".to_vec())]);
+            let session = Session::new(2, 0, Some(&base)).unwrap();
+            session.load(&path).unwrap();
+            assert_eq!(session.cookie_value("UID").as_deref(), Some("123"));
+            assert_eq!(
+                session.cookie_value("token").as_deref(),
+                Some("PRIVATE_LEGACY_TOKEN")
+            );
+            let store = session.cookies.lock().unwrap();
+            for other in ["https://example.org/", "http://mooc1.chaoxing.com/"] {
+                assert_eq!(
+                    store
+                        .get_request_values(&Url::parse(other).unwrap())
+                        .count(),
+                    0
+                );
+            }
+            drop(store);
+            session
+                .get("https://example.org/cookie-check", &[])
+                .unwrap();
+            let request = String::from_utf8(server.join().unwrap().remove(0)).unwrap();
+            assert!(!request.to_ascii_lowercase().contains("\r\ncookie:"));
+            assert!(!request.contains("PRIVATE_LEGACY_TOKEN"));
+        }
+        fs::remove_file(&path).unwrap();
+
+        let (base, server) = test_server(vec![("", b"{}".to_vec())]);
+        let session = Session::new(2, 0, Some(&base)).unwrap();
+        let origin = Url::parse(&base).unwrap();
+        {
+            let mut store = session.cookies.lock().unwrap();
+            store
+                .parse("kept=active; Max-Age=3600; Path=/", &origin)
+                .unwrap();
+            store
+                .parse("expiring=PRIVATE_EXPIRED_TOKEN; Max-Age=1; Path=/", &origin)
+                .unwrap();
+        }
+        session.save(&path).unwrap();
+        assert!(
+            fs::read_to_string(&path)
+                .unwrap()
+                .contains("PRIVATE_EXPIRED_TOKEN")
+        );
+        std::thread::sleep(Duration::from_secs(2));
+        let restored = Session::new(2, 0, Some(&base)).unwrap();
+        restored.load(&path).unwrap();
+        restored
+            .get("https://mooc1.chaoxing.com/cookie-check", &[])
+            .unwrap();
+        let request = String::from_utf8(server.join().unwrap().remove(0)).unwrap();
+        assert!(request.contains("kept=active"));
+        assert!(!request.contains("expiring=") && !request.contains("PRIVATE_EXPIRED_TOKEN"));
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn response_challenges_report_manual_actions_without_response_secrets() {
+        for (path, headers, body, action) in [
+            (
+                "antispiderShowVerify.ac",
+                "Content-Type: text/html\r\n",
+                "PRIVATE_CHALLENGE_BODY",
+                "captcha challenge",
+            ),
+            (
+                "course",
+                "Content-Type: text/html\r\n",
+                "<div class='grayBg'><a href='/knowledge/startface'>PRIVATE_CHALLENGE_BODY</a></div>",
+                "face verification",
+            ),
+        ] {
+            let (base, server) = test_server(vec![(headers, body.as_bytes().to_vec())]);
+            let session = Session::new(2, 2, Some(&base)).unwrap();
+            let error = session
+                .get(
+                    &format!("https://mooc1.chaoxing.com/{path}"),
+                    &[("token".into(), "PRIVATE_QUERY_TOKEN".into())],
+                )
+                .err()
+                .unwrap()
+                .to_string();
+            assert!(error.starts_with("action-required:") && error.contains(action));
+            assert!(!error.contains("PRIVATE_"));
+            assert_eq!(server.join().unwrap().len(), 1);
+        }
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            for (path, response) in [
+                (
+                    "/course",
+                    "HTTP/1.1 302 Found\r\nLocation: /login\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                ),
+                (
+                    "/login",
+                    "HTTP/1.1 200 OK\r\nContent-Length: 18\r\nConnection: close\r\n\r\nPRIVATE_LOGIN_BODY",
+                ),
+            ] {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(10)))
+                    .unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0; 4096];
+                while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+                    let count = stream.read(&mut buffer).unwrap();
+                    assert!(count > 0);
+                    request.extend_from_slice(&buffer[..count]);
+                }
+                assert!(String::from_utf8_lossy(&request).starts_with(&format!("GET {path}")));
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+        });
+        let session = Session::new(2, 2, Some(&base)).unwrap();
+        let error = session
+            .get("https://mooc1.chaoxing.com/course", &[])
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(error.contains("action-required: session expired"));
+        assert!(!error.contains("PRIVATE_LOGIN_BODY"));
+        server.join().unwrap();
+    }
+
+    #[test]
     fn signature_matches_python_golden() {
         let params = signature(
             123456,

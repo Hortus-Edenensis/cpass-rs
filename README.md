@@ -26,7 +26,7 @@ cpass resolve --input questions.json --answers local-answers.json --output resol
 
 `resolve` 只读取本地 JSON 题库，不调用配置中的在线搜索器，也不发送通知。题库为题干到答案的 JSON 对象，例如 `{"题干": "A", "判断题干": false}`。题干只规范化实体与排版空白，然后精确匹配。重复键或规范化后同题的不同有效答案会报告冲突。
 
-题目 JSON 与旧版一致；考试导出 `type=0`，作业 `type=1`。`parse/resolve` 的题目 JSON 输出到 stdout，处理报告默认输出到 stderr；也可用 `--output/--report` 各自保存。未完成时返回非零，已解析结果仍会保存。
+题目 JSON 与旧版一致；考试导出 `type=0`，作业 `type=1`。`parse/resolve` 的题目 JSON 输出到 stdout，处理报告默认输出到 stderr；也可用 `--output/--report` 各自保存。未完成时返回非零，已解析结果仍会保存。上下标保留为 `^{…}` / `_{…}`，MathML 保留树结构，`math/tex` 内容保留在 `\(…\)` 边界内；不会将公式压成普通文字后匹配。
 
 ## 登录和多会话
 
@@ -68,7 +68,7 @@ cpass run --course-id 123 --chapter-id 789 --commit --output saved-report.json
 cpass run --course-id 123 --chapter-id 789 --commit --final-submit --output final-report.json
 ```
 
-同一课程多个班级时必须用 `--class-id` 指定。默认读取、匹配和导出；`--commit` 才汇报媒体任务或网络保存答案；`--final-submit` 才允许交作业。配置 enable 字段控制各任务执行。未知任务会留在报告中，其它任务继续。
+同一课程多个班级时必须用 `--class-id` 指定。默认读取、匹配和导出；`--commit` 才汇报媒体任务或网络保存答案；`--final-submit` 才允许交作业。配置 enable 字段控制各任务执行。未知任务、坏任务卡和章节刷新失败会留在报告中，其它可获取任务继续。未执行或仅导出的任务仍计未完成，不能被章节总数掩盖；视频只有明确 `isPassed=true` 才计完成，`job=false` 不代表视频已完成。
 
 从 `tasks.json` 选取一个 Work 对象保存为 `work-task.json`，也可独立运行：
 
@@ -155,7 +155,7 @@ notifications:
     allow_plaintext: true
 ```
 
-有有效配置文件时，业务命令记录受限字段的 JSONL 事件，不写 Cookie、密码、题干或原始平台响应。日志超过 3 MiB 后轮转；归档按 `log_retention_days` 清理（默认 30 天，范围 1–365）。诊断只接受已知事件字段，丢弃其它行并记录数量；Unix 日志与诊断文件权限为 `0600`。日志写入失败和通知失败不覆盖业务结果。
+有有效配置文件时，业务命令记录受限字段的 JSONL 事件，不写 Cookie、密码、题干或原始平台响应。日志超过 3 MiB 后轮转；归档按 `log_retention_days` 清理（默认 30 天，范围 1–365）。诊断只接受已知事件字段，丢弃其它行并记录数量；Unix 日志与诊断文件权限为 `0600`。日志写入失败和通知失败不覆盖业务结果。通知成功及失败回执以独立 `notify` 阶段事件写入本地日志，可由 `diagnose` 查询；记录通知回执不会再次触发通知。
 
 通知默认关闭，设置 `enabled: true` 后启用所配置的服务。Gotify 使用 HTTPS（本机测试可用 HTTP），token 从指定环境变量读入请求头，以有效消息 ID 确认接受。MQTT 当前实现 MQTT 3.1.1 的 `mqtt://` QoS 1，需要匹配的 PUBACK；没有原生 `mqtts://`，TLS 请通过本地代理接入。明文连接必须显式 `allow_plaintext: true`，带凭据只允许回环地址；凭据不写 broker URL。通知确认仅表示服务接受事件，不表示用户已看到。
 

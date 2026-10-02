@@ -819,6 +819,198 @@ fn exam_workflow_dry_run_only_previews_and_never_submits() {
     assert!(requests.iter().all(|r| r.starts_with("GET ")));
 }
 
+#[test]
+fn exam_workflow_page_boundary_errors_never_submit() {
+    for (page, reason) in [
+        ("<p class=\"blankTips\">无效参数！</p>".into(), "提前结束"),
+        (judgment_page(false, "false").replace("42", "43"), "ID"),
+    ] {
+        let mut replies = exam_start_replies();
+        replies.extend([
+            (200, judgment_page(false, "false"), ""),
+            (200, "<ul><li data=\"0\">1</li></ul>".into(), ""),
+            (200, page, ""),
+        ]);
+        let server = FixtureServer::new(replies);
+        let mut exam = fixture_exam(&server);
+        exam.metadata().unwrap();
+        exam.start(None).unwrap();
+        let (_, report) = cpass::workflow::run_exam(
+            &mut exam,
+            &cpass::search::Searchers::new(&[]).unwrap(),
+            true,
+            true,
+            0.0,
+        )
+        .unwrap();
+        assert!(!report.complete());
+        assert!(report.incomplete > 0);
+        assert_eq!(report.existing, 0);
+        assert_eq!(report.submitted, 0);
+        assert!(!report.final_submitted);
+        assert!(report.parse_errors.contains_key(&0));
+        assert!(report.failures.iter().any(|failure| {
+            failure["reason"]
+                .as_str()
+                .is_some_and(|message| message.contains(reason))
+        }));
+        let requests = server.finish();
+        assert_eq!(requests.len(), 5);
+        assert!(requests[4].starts_with("GET /exam-ans/exam/test/reVersionTestStartNew?"));
+        assert!(requests.iter().all(|request| request.starts_with("GET ")));
+        assert!(
+            !requests
+                .iter()
+                .any(|request| request.contains("/reVersionSubmitTestNew"))
+        );
+    }
+}
+
+#[test]
+fn exam_workflow_failed_final_receipt_does_not_claim_submission() {
+    let mut replies = exam_start_replies();
+    replies.extend([
+        (200, judgment_page(false, "false"), ""),
+        (
+            200,
+            "<ul><li data=\"0\" class=\"complated\">1</li></ul>".into(),
+            "",
+        ),
+        (200, judgment_page(false, "false"), ""),
+        (
+            200,
+            json!({"status":"error","msg":"final rejected"}).to_string(),
+            "",
+        ),
+    ]);
+    let server = FixtureServer::new(replies);
+    let mut exam = fixture_exam(&server);
+    exam.metadata().unwrap();
+    exam.start(None).unwrap();
+    let (_, report) = cpass::workflow::run_exam(
+        &mut exam,
+        &cpass::search::Searchers::new(&[]).unwrap(),
+        true,
+        true,
+        0.0,
+    )
+    .unwrap();
+    assert_eq!(report.existing, 1);
+    assert_eq!(report.submitted, 0);
+    assert_eq!(report.incomplete, 0);
+    assert!(!report.final_submitted);
+    assert!(!report.complete());
+    assert_eq!(report.failures.len(), 1);
+    assert!(
+        report.failures[0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("回执未确认成功")
+    );
+    let requests = server.finish();
+    assert_eq!(requests.len(), 6);
+    let posts = requests
+        .iter()
+        .filter(|request| request.starts_with("POST "))
+        .collect::<Vec<_>>();
+    assert_eq!(posts.len(), 1);
+    assert!(posts[0].starts_with("POST /exam-ans/exam/test/reVersionSubmitTestNew?"));
+    assert!(posts[0].contains("tempSave=false"));
+    assert!(!posts[0].contains("answer42="));
+}
+
+#[test]
+fn cli_exam_action_flags_preserve_metadata_only_and_reject_implicit_writes() {
+    for scenario in ["metadata", "commit-without-start", "final-without-commit"] {
+        let folder = CliDirectory::new();
+        let mut replies = Vec::new();
+        if scenario != "final-without-commit" {
+            replies.push((
+                200,
+                json!({"result":1,"msg":{"puid":7,"name":"fixture"}}).to_string(),
+                "",
+            ));
+        }
+        if scenario == "metadata" {
+            replies.extend([
+                (200, json!({"result":1,"channelList":[{"cpi":3,"key":4,"content":{"id":2,"course":{"data":[{"id":1,"name":"fixture","teacherfactor":"teacher"}]}}}]}).to_string(), ""),
+                (200, "<ul class=\"nav\"><li data=\"/exam-ans/exam/phone/task-exam?taskrefId=10&amp;enc_task=fixture-task\"><p>离线考试</p><span>未开始</span></li></ul>".into(), ""),
+                (200, include_str!("fixtures/exam_cover.html").into(), ""),
+            ]);
+        }
+        let server = FixtureServer::new(replies);
+        let mut command = folder.command();
+        command.args([
+            "--base-url",
+            &server.url,
+            "exam",
+            "--course-id",
+            "1",
+            "--exam-id",
+            "10",
+        ]);
+        match scenario {
+            "commit-without-start" => {
+                command.arg("--commit");
+            }
+            "final-without-commit" => {
+                command.args(["--start", "--final-submit"]);
+            }
+            _ => {}
+        }
+        let output = command.output().unwrap();
+        assert_eq!(
+            output.status.success(),
+            scenario == "metadata",
+            "{scenario}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if scenario == "metadata" {
+            let metadata: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(metadata["id"], 10);
+            assert_eq!(metadata["need_code"], false);
+            assert_eq!(metadata["need_face"], false);
+            assert_eq!(metadata["need_captcha"], false);
+        } else {
+            assert!(output.stdout.is_empty());
+            let error = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                error.contains(if scenario == "commit-without-start" {
+                    "--start"
+                } else {
+                    "--commit"
+                }),
+                "{error}"
+            );
+        }
+        let requests = server.finish();
+        assert!(
+            requests.iter().all(|request| request.starts_with("GET ")),
+            "{scenario}"
+        );
+        assert!(
+            !requests
+                .iter()
+                .any(|request| request.contains("/exam/phone/start?")
+                    || request.contains("/reVersionSubmitTestNew")
+                    || request.contains("/exam/phone/preview?")),
+            "{scenario}"
+        );
+        match scenario {
+            "metadata" => {
+                assert_eq!(requests.len(), 4);
+                assert!(requests[2].starts_with("GET /exam/phone/task-list?"));
+                assert!(requests[3].starts_with("GET /exam-ans/exam/phone/task-exam?"));
+            }
+            "commit-without-start" => {
+                assert_eq!(requests.len(), 1);
+                assert!(requests[0].starts_with("GET /apis/login/userLogin4Uname.do "));
+            }
+            _ => assert!(requests.is_empty()),
+        }
+    }
+}
+
 struct CliDirectory(std::path::PathBuf);
 
 impl CliDirectory {
@@ -980,6 +1172,128 @@ fn cli_resolve_emits_one_json_document_on_stdout_and_report_on_stderr() {
     assert_eq!(report["submitted"], 0);
     assert_eq!(report["final_submitted"], false);
     assert_eq!(std::fs::read_dir(&folder.0).unwrap().count(), 1);
+}
+
+#[test]
+fn cli_run_class_selection_and_numeric_chapter_order() {
+    let account = json!({"result":1,"msg":{"puid":7,"name":"fixture"}});
+    let courses = json!({"result":1,"channelList":[
+        {"cpi":30,"key":40,"content":{"id":11,"course":{"data":[{"id":1,"name":"class-one","teacherfactor":"teacher"}]}}},
+        {"cpi":31,"key":41,"content":{"id":12,"course":{"data":[{"id":1,"name":"class-two","teacherfactor":"teacher"}]}}}
+    ]});
+    for selected in [false, true] {
+        let folder = CliDirectory::new();
+        let mut replies = vec![
+            (200, account.to_string(), ""),
+            (200, courses.to_string(), ""),
+        ];
+        if selected {
+            replies.extend([
+                (200, json!({"data":[{"course":{"data":[{"knowledge":{"data":[
+                    {"id":110,"label":"1.10","name":"tenth","status":"1"},
+                    {"id":102,"label":"1.2","name":"second","status":"1"}
+                ]}}]}}]}).to_string(), ""),
+                (200, json!({"110":{"totalcount":1,"finishcount":0,"unfinishcount":1},"102":{"totalcount":1,"finishcount":0,"unfinishcount":1}}).to_string(), ""),
+            ]);
+        }
+        let server = FixtureServer::new(replies);
+        let mut command = folder.command();
+        command.args(["--base-url", &server.url, "chapters", "--course-id", "1"]);
+        if selected {
+            command.args(["--class-id", "12"]);
+        }
+        let output = command.output().unwrap();
+        let requests = server.finish();
+        assert_eq!(
+            output.status.success(),
+            selected,
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if selected {
+            let chapters: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(chapters[0]["id"], 102);
+            assert_eq!(chapters[0]["label"], "1.2");
+            assert_eq!(chapters[1]["id"], 110);
+            assert_eq!(chapters[1]["label"], "1.10");
+            assert_eq!(requests.len(), 4);
+            assert!(requests[2].starts_with("GET /gas/clazz?id=41&personid=31&"));
+            assert!(requests[3].starts_with("POST /job/myjobsnodesmap "));
+            assert!(requests[3].contains("clazzid=12"));
+            assert!(requests[3].contains("cpi=31"));
+            assert!(requests[3].contains("nodes=102%2C110"));
+        } else {
+            assert!(String::from_utf8_lossy(&output.stderr).contains("--class-id"));
+            assert!(output.stdout.is_empty());
+            assert_eq!(requests.len(), 2);
+            assert!(
+                !requests.iter().any(
+                    |request| request.contains("/gas/") || request.contains("/knowledge/cards")
+                )
+            );
+        }
+    }
+}
+
+#[test]
+fn cli_run_document_receipt_does_not_override_fresh_incomplete_counts() {
+    let folder = CliDirectory::new();
+    let config = folder.0.join("config.yml");
+    std::fs::write(&config, "request_retries: 0\ndocument:\n  wait: 0\n").unwrap();
+    let account = json!({"result":1,"msg":{"puid":7,"name":"fixture"}});
+    let courses = json!({"result":1,"channelList":[{"cpi":3,"key":4,"content":{"id":2,"course":{"data":[{"id":1,"name":"fixture","teacherfactor":"teacher"}]}}}]});
+    let chapters = json!({"data":[{"course":{"data":[{"knowledge":{"data":[{"id":9,"label":"1","name":"fixture","status":"1"}]}}]}}]});
+    let states = json!({"9":{"totalcount":1,"finishcount":0,"unfinishcount":1}});
+    let cards = json!({"data":[{"card":{"data":[{"description":"<iframe module='insertdoc' data='{\"objectid\":\"doc-9\"}'></iframe>"}]}}]});
+    let attachment = json!({"defaults":{},"attachments":[{"job":true,"jobid":"doc-job-9","jtoken":"fixture-token","property":{"objectid":"doc-9"}}]});
+    let server = FixtureServer::new(vec![
+        (200, account.to_string(), ""),
+        (200, courses.to_string(), ""),
+        (200, chapters.to_string(), ""),
+        (200, states.to_string(), ""),
+        (200, String::new(), ""),
+        (200, cards.to_string(), ""),
+        (
+            200,
+            format!("<script>window.AttachmentSetting = {attachment};</script>"),
+            "",
+        ),
+        (200, json!({"status":true}).to_string(), ""),
+        (200, chapters.to_string(), ""),
+        (200, states.to_string(), ""),
+    ]);
+    let output = folder
+        .command()
+        .arg("--config")
+        .arg(&config)
+        .args([
+            "--base-url",
+            &server.url,
+            "run",
+            "--course-id",
+            "1",
+            "--commit",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["tasks"].as_array().unwrap().len(), 1);
+    assert_eq!(result["tasks"][0]["kind"], "Document");
+    assert_eq!(result["tasks"][0]["result"]["status"], true);
+    assert_eq!(result["chapters_after"][0]["total"], 1);
+    assert_eq!(result["chapters_after"][0]["finished"], 0);
+    assert_eq!(result["platform_completion_verified"], false);
+    let requests = server.finish();
+    assert_eq!(requests.len(), 10);
+    assert!(requests[4].starts_with("GET /mooc-ans/mycourse/studentstudyAjax?"));
+    assert!(requests[7].starts_with("GET /ananas/job/document?jobid=doc-job-9&knowledgeid=9&courseid=1&clazzid=2&jtoken=fixture-token&"));
+    assert!(requests[8].starts_with("GET /gas/clazz?"));
+    assert!(requests[9].starts_with("POST /job/myjobsnodesmap "));
 }
 
 #[test]
