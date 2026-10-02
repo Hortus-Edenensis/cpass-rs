@@ -1,8 +1,6 @@
-name: Package Executable
+name: Legacy Python macOS package (manual)
 
 on:
-  release:
-    types: [ published ]
   workflow_dispatch:
 
 jobs:

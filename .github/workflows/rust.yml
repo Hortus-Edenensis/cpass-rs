@@ -1,0 +1,45 @@
+name: Rust checks and packages
+on:
+  push:
+    branches: [main, 'codex/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        toolchain: [stable]
+        include:
+          - os: ubuntu-latest
+            toolchain: '1.88.0'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install ${{ matrix.toolchain }} --profile minimal --component rustfmt --component clippy
+      - run: rustup default ${{ matrix.toolchain }}
+      - run: cargo fmt --all --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - run: cargo build --locked --release
+      - name: Package Unix binary
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p out
+          cp target/release/cpass config.yml README.md ROADMAP.md LICENSE out/
+      - name: Package Windows binary
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out
+          Copy-Item target/release/cpass.exe,config.yml,README.md,ROADMAP.md,LICENSE out/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cpass-${{ runner.os }}-${{ runner.arch }}-${{ matrix.toolchain }}
+          path: out/

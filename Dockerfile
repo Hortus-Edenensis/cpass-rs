@@ -1,19 +1,14 @@
-FROM python:3.10
+FROM rust:1-bookworm AS build
+WORKDIR /build
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+RUN cargo build --release --locked
 
-ENV TZ="Asia/Shanghai"
-
-# 安装必要组件
-RUN apt update && \
-    apt-get -y install libgl1-mesa-glx && \
-    pip install poetry
-
-# 安装依赖
-WORKDIR /app
-COPY ["pyproject.toml", "poetry.lock", "/app/"]
-RUN poetry config virtualenvs.in-project true && \
-    poetry install
-
-# 添加源文件
-COPY . /app
-
-ENTRYPOINT ["poetry", "run", "python3", "main.py"]
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /build/target/release/cpass /usr/local/bin/cpass
+WORKDIR /data
+COPY config.yml /data/config.yml
+ENTRYPOINT ["cpass"]
+CMD ["--help"]
