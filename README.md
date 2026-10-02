@@ -24,7 +24,7 @@ cpass parse --kind exam --input exam.html --output exam.json
 cpass resolve --input questions.json --answers local-answers.json --output resolved.json --report resolve-report.json
 ```
 
-`resolve` 的答案解析只读取本地 JSON 题库，不调用配置中的在线搜索器；如果显式启用通知，命令结束时仍会发送配置的事件通知。题库为题干到答案的 JSON 对象，例如 `{"题干": "A", "判断题干": false}`。题干只规范化实体与排版空白，然后精确匹配。重复键或规范化后同题的不同有效答案会报告冲突。
+`resolve` 只读取本地 JSON 题库，不调用配置中的在线搜索器，也不发送通知。题库为题干到答案的 JSON 对象，例如 `{"题干": "A", "判断题干": false}`。题干只规范化实体与排版空白，然后精确匹配。重复键或规范化后同题的不同有效答案会报告冲突。
 
 题目 JSON 与旧版一致；考试导出 `type=0`，作业 `type=1`。`parse/resolve` 的题目 JSON 输出到 stdout，处理报告默认输出到 stderr；也可用 `--output/--report` 各自保存。未完成时返回非零，已解析结果仍会保存。
 
