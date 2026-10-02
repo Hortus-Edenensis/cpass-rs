@@ -1374,4 +1374,47 @@ fn cli_batch_output_aliases_cannot_overwrite_resume_checkpoint() {
             );
         }
     }
+    #[cfg(windows)]
+    {
+        let folder = CliDirectory::new();
+        let checkpoint = folder.0.join("Checkpoint-new.json");
+        let report = folder.0.join("checkpoint-new.json");
+        let server = FixtureServer::new(vec![(
+            200,
+            json!({"result":1,"msg":{"puid":7,"name":"fixture"}}).to_string(),
+            "",
+        )]);
+        let output = folder
+            .command()
+            .args([
+                "--base-url",
+                &server.url,
+                "run-batch",
+                "--course-id",
+                "1",
+                "2",
+                "--resume",
+                "Checkpoint-new.json",
+                "--output",
+                "checkpoint-new.json",
+            ])
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            error.contains("checkpoint") && error.contains("output"),
+            "{error}"
+        );
+        assert!(!checkpoint.exists());
+        assert!(!report.exists());
+        let requests = server.finish();
+        assert_eq!(
+            requests.len(),
+            1,
+            "no course or task requests are permitted"
+        );
+        assert!(requests[0].starts_with("GET /apis/login/userLogin4Uname.do "));
+    }
 }

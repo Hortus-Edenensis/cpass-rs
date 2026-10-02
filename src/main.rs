@@ -1037,7 +1037,15 @@ fn resolved_path(path: &Path) -> Result<PathBuf> {
     for part in suffix.into_iter().rev() {
         resolved.push(part);
     }
-    Ok(resolved)
+    #[cfg(windows)]
+    {
+        // Case aliases must be rejected before either output exists.
+        Ok(PathBuf::from(resolved.to_string_lossy().to_lowercase()))
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(resolved)
+    }
 }
 
 fn event_log(config: &Config, event: &operations::Event, notify: bool) {
