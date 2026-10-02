@@ -11,7 +11,6 @@ faces
 logs
 export
 *.db
-questions.json
-questions.*
+/questions.*
 tests
 outputs
