@@ -10,14 +10,17 @@
 | Rust CLI/HTTP integration | 本机 Rust 1.97.1 | 31 项通过 | 真实 localhost 请求、失败回执、动态考试参数、CLI、批量恢复、路径别名、离线零通知 |
 | Python unittest | Python 3.10 | 35 项通过，0.303 秒 | 保留 Python 严格解析基线，离线 HTML/模拟搜索器/DTO |
 | Python unittest | Python 3.11 | 35 项通过，0.258 秒 | 同一 Python 回归模块在第二个受支持版本运行 |
-| Python 格式 | black；isort black profile、line length 100 | 11 个改动文件通过 | 与项目 black 的 100 列约定一致 |
+| Python 格式 | Python 3.10/3.11；black、isort black profile、line length 100 | 两版本各 11 个改动文件通过 | 与项目 black 的 100 列约定一致 |
 | 原生 release | macOS arm64，Rust 1.97.1 | 构建及 6 项 CLI 冒烟通过 | help、配置、作业/考试解析、未完成答案退出码、TUI 退出 |
-| Docker | 本机 Linux arm64 与 GitHub Linux x64 | 构建及无网络冒烟通过 | help、配置、文件读写、本地匹配、真实 Tesseract 固定图片提示 |
-| GitHub CI | Linux/macOS/Windows stable 与 Linux 1.88.0 | fmt/clippy/test/release 全部通过 | 锁定依赖、最低版本、三个系统的 CLI/HTTP 回归和二进制构建 |
+| Docker | 本机 Linux arm64 与 GitHub Linux x64 | 本机 5 项无网络冒烟及容器 CI 通过 | help、配置、文件读写、本地匹配、真实 Tesseract 固定图片提示 |
+| 日志/诊断 CLI | macOS arm64，源码 `8af026c` 的原生二进制 | 轮转、保留、过滤、权限与拒覆盖冒烟通过 | 临时目录测试，不代表用户目录长期运行或在线通知验收 |
+| GitHub CI | Linux/macOS/Windows stable 与 Linux 1.88.0 | fmt/clippy/test/release 全部通过 | 锁定依赖、最低版本、Windows 路径别名回归及三平台 release CLI 冒烟 |
 
-以上结果为本轮实际运行结果。已验证 Rust 源码提交 `391861dcb523a66611bbf3b298eca6541bccb73c`；[四组 CI](https://github.com/Hortus-Edenensis/cpass-rs/actions/runs/37045015755) 和 [容器 CI](https://github.com/Hortus-Edenensis/cpass-rs/actions/runs/37045015736) 均成功。Unix 库测试 61 项，Windows 的本地 shell OCR 进程测试因平台条件跳过；CLI/HTTP 集成均为 31 项。
+以上结果为本轮实际运行结果。已验证 Rust 源码提交 `8af026cdb427912a3d22835992af7bf0082f466c`；[四组 CI](https://github.com/Hortus-Edenensis/cpass-rs/actions/runs/37046872221) 和 [容器 CI](https://github.com/Hortus-Edenensis/cpass-rs/actions/runs/37046872191) 均成功。Unix 库测试 61 项，Windows 的本地 shell OCR 进程测试因平台条件跳过；CLI/HTTP 集成均为 31 项，Windows 构建执行了不存在目标文件的大小写路径别名条件回归。三平台 release CLI 冒烟在上述最新 CI 中通过。
 
 OCR 单元测试使用可控替代进程验证超时；容器另以真实 Tesseract 5.3.0 识别固定 `CPASS 12345` 图片并要求人工确认。固定图片成功不能证明真实验证码识别准确率，也不表示平台接受验证。
+
+日志 CLI 冒烟由交付目录的 `rust-refactor/log-smoke.py` 复现，结果见同目录 `log-smoke.json`：3.51 MiB 日志触发轮转；过期 `events-0.jsonl` 删除，未来数字归档和 `events-private.jsonl` 保留；新日志与诊断权限为 `0600`；270000 条无效行全部丢弃；既有诊断文件拒绝覆盖（退出码 1）且内容保留。
 
 ## 最终检查清单
 
@@ -28,10 +31,10 @@ OCR 单元测试使用可控替代进程验证超时；容器另以真实 Tesser
 | `cargo fmt --all --check` | 通过 | 最终源码无格式差异 |
 | `cargo clippy --locked --all-targets -- -D warnings` | 通过 | 最终源码无警告 |
 | `cargo build --release --locked` | 本机与四组 CI 通过 | release 构建成功 |
-| release CLI help/config/离线解析/TUI smoke | 本机 6 项通过；跨平台发布步骤复用同样入口 | 预期退出码和输出字段符合合同；批量恢复由 31 项集成中的真实 CLI 检查覆盖 |
-| Python 改动文件格式检查 | black/isort 通过，11 个文件 | isort 使用 black profile 与项目 100 列约定 |
+| release CLI help/config/离线解析/TUI smoke | 本机 6 项与最新三平台 release CLI 冒烟通过 | 预期退出码和输出字段符合合同；批量恢复由 31 项集成中的真实 CLI 检查覆盖 |
+| Python 改动文件格式检查 | Python 3.10/3.11 的 black/isort 均通过，各 11 个文件 | isort 使用 black profile 与项目 100 列约定 |
 | Rust 1.88 最低版本 | Linux 1.88.0 CI 全部通过 | 锁定依赖及源码在 1.88 编译和回归通过 |
-| Docker 构建与运行 | 本机及 GitHub CI 通过 | 无网络容器 help、配置、离线文件读写和 OCR 成功 |
+| Docker 构建与运行 | 本机 5 项无网冒烟及 GitHub CI 通过 | 无网络容器 help、配置、离线文件读写和 OCR 成功 |
 | Linux/macOS/Windows GitHub CI | 全部通过并上传产物 | 每个平台 fmt/clippy/test/release 全通过 |
 | 真实平台 M6 | 待测试会话与明确执行范围 | 按 ROADMAP M6 每项保留真实回执与客户端对照 |
 

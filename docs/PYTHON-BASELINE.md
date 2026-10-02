@@ -70,7 +70,7 @@
 
 ## 🧩Typographical
 
-![](imgs/typo.png)
+![](../imgs/typo.png)
 
 ## 🚀Build
 
@@ -172,7 +172,7 @@ docker run -it \
 
 ### 主程序配置
 
-配置文件使用 Yaml 语法编写，存放于 [config.yml](config.yml)
+配置文件使用 Yaml 语法编写，存放于 [config.yml](../config.yml)
 
 请根据注释修改配置内容
 
@@ -270,7 +270,7 @@ DeepSeek 使用与 OpenAI 兼容的 API 格式，只需修改 `base_url` 和 `mo
 
 登录界面直接按下回车键则会显示二维码，使用学习通手机客户端扫描登录
 
-![](imgs/demo1.png)
+![](../imgs/demo1.png)
 
 按照提示选择目标课程，多个课程之间使用`,`分隔，使用**课程选择器语法**，如下：
 
@@ -279,11 +279,11 @@ DeepSeek 使用与 OpenAI 兼容的 API 格式，只需修改 `base_url` 和 `mo
 - 课程名：`"解析几何"`、`"马克思主义"`（非重复项可省略后半部分）
 - 课程 courseId：`#23026xxx`、`#22928xx`
 
-![](imgs/demo2.png)
+![](../imgs/demo2.png)
 
 程序会自动完成视频及测验任务点，并展示章节任务点情况
 
-![](imgs/demo3.png)
+![](../imgs/demo3.png)
 
 如需要完成课程`0`、课程`1-3`、课程`解析几何`则输入：`0,1-3,"解析几何"`
 
@@ -295,7 +295,7 @@ DeepSeek 使用与 OpenAI 兼容的 API 格式，只需修改 `base_url` 和 `mo
 
 如需导出题库到 export 路径，需在考试选择界面输入`e`+序号
 
-![](imgs/demo4.png)
+![](../imgs/demo4.png)
 
 ## 💡About Repo Name
 

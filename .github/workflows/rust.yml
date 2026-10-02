@@ -41,13 +41,15 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           mkdir -p out
-          cp target/release/cpass config.yml README.md ROADMAP.md LICENSE out/
+          cp target/release/cpass config.yml README.md ROADMAP.md VALIDATION.md LICENSE out/
+          cp -R docs imgs out/
       - name: Package Windows binary
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out
-          Copy-Item target/release/cpass.exe,config.yml,README.md,ROADMAP.md,LICENSE out/
+          Copy-Item target/release/cpass.exe,config.yml,README.md,ROADMAP.md,VALIDATION.md,LICENSE out/
+          Copy-Item docs,imgs -Recurse -Destination out/
       - uses: actions/upload-artifact@v4
         with:
           name: cpass-${{ runner.os }}-${{ runner.arch }}-${{ matrix.toolchain }}
