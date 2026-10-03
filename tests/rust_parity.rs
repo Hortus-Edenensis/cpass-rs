@@ -1011,6 +1011,287 @@ fn cli_exam_action_flags_preserve_metadata_only_and_reject_implicit_writes() {
     }
 }
 
+#[test]
+fn mock_work_four_types_preserve_existing_answers_and_separate_save_from_final() {
+    for action in ["save", "final", "conflicting-blank"] {
+        let folder = CliDirectory::new();
+        let bank = folder.0.join("answers.json");
+        std::fs::write(
+            &bank,
+            json!({
+                "第一行\n第二行\n第三行":"甲选项",
+                "以下正确的是？":["A","C","A"],
+                "补全两空": if action == "conflicting-blank" { json!(["改写已有", "新增"]) } else { json!(["已有", "新增"]) },
+                "以下说法不正确":true
+            }).to_string(),
+        ).unwrap();
+        let sources =
+            cpass::search::Searchers::new(&[json!({"type":"JsonFileSearcher","file_path":bank})])
+                .unwrap();
+        let mut replies = vec![(200, WORK.to_string(), "")];
+        if action != "conflicting-blank" {
+            replies.push((200, json!({"status":true}).to_string(), ""));
+        }
+        let server = FixtureServer::new(replies);
+        let mut work = fixture_work(&server);
+        let (paper, report) =
+            cpass::workflow::run_work(&mut work, &sources, true, action != "save", false).unwrap();
+        assert_eq!(
+            paper.questions.iter().map(|q| q.kind.0).collect::<Vec<_>>(),
+            [0, 1, 2, 3]
+        );
+        assert_eq!(paper.questions[0].answer, "A");
+        assert_eq!(paper.questions[1].answer, "CA");
+        assert_eq!(paper.questions[3].answer, json!(false));
+        assert_eq!(report.existing, 1);
+        assert_eq!(report.submitted, 0);
+        assert_eq!(report.saved, action == "save");
+        assert_eq!(report.final_submitted, action == "final");
+        let requests = server.finish();
+        assert!(requests[0].starts_with("GET /android/mworkspecial?"));
+        if action == "conflicting-blank" {
+            assert_eq!(paper.questions[2].answer, json!(["  已有  ", ""]));
+            assert_eq!(report.matched, 2);
+            assert_eq!(report.cached, 2);
+            assert_eq!(report.incomplete, 1);
+            assert!(!report.complete());
+            assert_eq!(requests.len(), 1);
+            continue;
+        }
+        assert_eq!(paper.questions[2].answer, json!(["  已有  ", "新增"]));
+        assert_eq!(report.matched, 3);
+        assert_eq!(report.cached, 3);
+        assert!(report.complete());
+        assert_eq!(requests.len(), 2);
+        let (headers, body) = requests[1].split_once("\r\n\r\n").unwrap();
+        assert!(headers.starts_with("POST /work/addStudentWorkNew?"));
+        let form: std::collections::BTreeMap<_, _> =
+            reqwest::Url::parse(&format!("https://fixture.invalid/?{body}"))
+                .unwrap()
+                .query_pairs()
+                .into_owned()
+                .collect();
+        for (key, value) in [
+            ("totalQuestionNum", "4"),
+            ("answerwqbid", "42,43,44,45"),
+            ("answertype42", "0"),
+            ("answertype43", "1"),
+            ("answertype44", "2"),
+            ("answertype45", "3"),
+            ("answer42", "A"),
+            ("answer43", "CA"),
+            ("tiankongsize44", "2"),
+            ("answer441", "  已有  "),
+            ("answer442", "新增"),
+            ("answer45", "false"),
+        ] {
+            assert_eq!(
+                form.get(key).map(String::as_str),
+                Some(value),
+                "{action}: {key}"
+            );
+        }
+        assert_eq!(headers.contains("tempsave=1"), action == "save");
+        assert_eq!(headers.contains("saveStatus=1"), action == "save");
+        assert_eq!(
+            headers.contains("keyboardDisplayRequiresUserAction=1"),
+            action == "final"
+        );
+        assert_eq!(form["pyFlag"], if action == "save" { "1" } else { "" });
+    }
+}
+
+#[test]
+fn mock_exam_four_types_verify_pages_dynamic_receipts_and_incomplete_guard() {
+    let dom = scraper::Html::parse_document(EXAM);
+    let nodes: Vec<_> = dom
+        .select(&scraper::Selector::parse("div.questionWrap.singleQuesId.ans-cc-exam").unwrap())
+        .map(|node| node.html())
+        .collect();
+    assert_eq!(nodes.len(), 4);
+    for incomplete in [false, true] {
+        let folder = CliDirectory::new();
+        let bank = folder.0.join("answers.json");
+        std::fs::write(&bank, json!({
+            "第一行\n第二行\n第三行":"甲选项",
+            "以下正确的是？": if incomplete { json!(["C", "不存在"]) } else { json!(["A", "C", "A"]) },
+            "补全两空":["已有", "新增"],
+            "以下说法不正确":true
+        }).to_string()).unwrap();
+        let sources =
+            cpass::search::Searchers::new(&[json!({"type":"JsonFileSearcher","file_path":bank})])
+                .unwrap();
+        let mut replies = exam_start_replies();
+        replies.extend([
+            (200, EXAM.to_string(), ""),
+            (200, "<ul><li data='0'>1</li><li data='1'>2</li><li data='2'>3</li><li data='3' class='complated'>4</li></ul>".into(), ""),
+        ]);
+        for (index, node) in nodes.iter().enumerate() {
+            let (enc, last, remain) = match index {
+                0 => ("page-42", 101, 80),
+                1 => ("page-43", 102, 79),
+                2 => ("page-44", 103, 78),
+                _ => ("receipt-44", 203, 93),
+            };
+            let page = format!(
+                r#"<form id="submitTest"><input id="enc" value="{enc}"><input id="encRemainTime" value="{remain}"><input id="remainTime" value="100"><input id="encLastUpdateTime" value="{last}">{node}</form>"#
+            );
+            replies.push((200, page, ""));
+            if index < 3 && !(incomplete && index == 1) {
+                replies.push((200, json!({"status":"success","data":format!("{}|{}|receipt-{}", 201 + index, 91 + index, 42 + index)}).to_string(), ""));
+            }
+        }
+        if !incomplete {
+            replies.push((200, json!({"status":"success"}).to_string(), ""));
+        }
+        let server = FixtureServer::new(replies);
+        let mut exam = fixture_exam(&server);
+        exam.metadata().unwrap();
+        exam.start(None).unwrap();
+        let (paper, report) =
+            cpass::workflow::run_exam(&mut exam, &sources, true, true, 0.0).unwrap();
+        assert_eq!(
+            paper.questions.iter().map(|q| q.kind.0).collect::<Vec<_>>(),
+            [0, 1, 2, 3]
+        );
+        assert_eq!(paper.questions[0].answer, "A");
+        assert_eq!(
+            paper.questions[1].answer,
+            if incomplete { Value::Null } else { json!("CA") }
+        );
+        assert_eq!(paper.questions[2].answer, json!(["  已有  ", "新增"]));
+        assert_eq!(paper.questions[3].answer, json!(false));
+        assert_eq!(report.existing, 1);
+        assert_eq!(report.matched, if incomplete { 2 } else { 3 });
+        assert_eq!(report.submitted, if incomplete { 2 } else { 3 });
+        assert_eq!(report.cached, 0);
+        assert_eq!(report.incomplete, usize::from(incomplete));
+        assert_eq!(report.complete(), !incomplete);
+        assert_eq!(report.final_submitted, !incomplete);
+        assert_eq!(report.failures.len(), usize::from(incomplete));
+        let requests = server.finish();
+        assert_eq!(requests.len(), if incomplete { 10 } else { 12 });
+        let mut shared_ua = None;
+        let mut device_fields = 0;
+        for request in &requests {
+            let (headers, body) = request.split_once("\r\n\r\n").unwrap();
+            let ua = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("user-agent")
+                        .then(|| value.trim())
+                })
+                .unwrap();
+            assert_eq!(*shared_ua.get_or_insert(ua), ua);
+            let device = ua.rsplit_once("(@Kalimdor)_").unwrap().1;
+            assert_eq!(device.len(), 32);
+            assert!(device.bytes().all(|byte| byte.is_ascii_hexdigit()));
+            let target = headers
+                .lines()
+                .next()
+                .unwrap()
+                .split_whitespace()
+                .nth(1)
+                .unwrap();
+            for encoded in [target.split_once('?').map_or("", |(_, query)| query), body] {
+                let url =
+                    reqwest::Url::parse(&format!("https://fixture.invalid/?{encoded}")).unwrap();
+                for (_, value) in url.query_pairs().filter(|(name, _)| name == "imei") {
+                    assert_eq!(value, device);
+                    device_fields += 1;
+                }
+            }
+        }
+        assert!(device_fields >= 6);
+        let fetches: Vec<_> = requests
+            .iter()
+            .filter(|request| request.starts_with("GET /exam-ans/exam/test/reVersionTestStartNew?"))
+            .collect();
+        assert_eq!(fetches.len(), 4);
+        for (index, fetch) in fetches.iter().enumerate() {
+            assert!(
+                fetch
+                    .lines()
+                    .next()
+                    .unwrap()
+                    .contains(&format!("start={index}"))
+            );
+        }
+        assert!(
+            fetches[1]
+                .contains("enc=receipt-42&remainTimeParam=91&relationAnswerLastUpdateTime=201")
+        );
+        assert!(fetches[2].contains(if incomplete {
+            "enc=page-43&remainTimeParam=79&relationAnswerLastUpdateTime=102"
+        } else {
+            "enc=receipt-43&remainTimeParam=92&relationAnswerLastUpdateTime=202"
+        }));
+        assert!(
+            fetches[3]
+                .contains("enc=receipt-44&remainTimeParam=93&relationAnswerLastUpdateTime=203")
+        );
+        let posts: Vec<_> = requests
+            .iter()
+            .filter(|request| request.starts_with("POST "))
+            .collect();
+        assert_eq!(posts.len(), if incomplete { 2 } else { 4 });
+        for post in posts {
+            let (headers, body) = post.split_once("\r\n\r\n").unwrap();
+            let url = reqwest::Url::parse(&format!(
+                "https://fixture.invalid{}",
+                headers
+                    .lines()
+                    .next()
+                    .unwrap()
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap()
+            ))
+            .unwrap();
+            let query: std::collections::BTreeMap<_, _> = url.query_pairs().into_owned().collect();
+            let form: std::collections::BTreeMap<_, _> =
+                reqwest::Url::parse(&format!("https://fixture.invalid/?{body}"))
+                    .unwrap()
+                    .query_pairs()
+                    .into_owned()
+                    .collect();
+            assert!(!form.contains_key("answer45"));
+            match query["qid"].as_str() {
+                "42" => {
+                    assert_eq!(form["answer42"], "A");
+                    assert_eq!(form["type42"], "0");
+                    assert_eq!(form["enc"], "page-42");
+                    assert_eq!(form["tempSave"], "true");
+                }
+                "43" => {
+                    assert!(!incomplete);
+                    assert_eq!(form["answers43"], "CA");
+                    assert_eq!(form["type43"], "1");
+                    assert_eq!(form["enc"], "page-43");
+                    assert_eq!(form["tempSave"], "true");
+                }
+                "44" => {
+                    assert_eq!(form["answer441"], "  已有  ");
+                    assert_eq!(form["answer442"], "新增");
+                    assert_eq!(form["blankNum44"], "1,2,");
+                    assert_eq!(form["type44"], "2");
+                    assert_eq!(form["enc"], "page-44");
+                    assert_eq!(form["tempSave"], "true");
+                }
+                "" => {
+                    assert!(!incomplete);
+                    assert_eq!(form["tempSave"], "false");
+                    assert_eq!(form["enc"], "receipt-44");
+                    assert_eq!(form["encLastUpdateTime"], "203");
+                    assert_eq!(form["encRemainTime"], "93");
+                }
+                id => panic!("unexpected submitted question: {id}"),
+            }
+        }
+    }
+}
+
 struct CliDirectory(std::path::PathBuf);
 
 impl CliDirectory {
@@ -1091,6 +1372,164 @@ fn cli_work_export_reviewed_is_read_only_and_keeps_reference_out_of_answers() {
             .iter()
             .any(|request| request.contains("addStudentWorkNew"))
     );
+}
+
+#[test]
+fn cli_password_login_persists_session_cookie_and_device_across_processes() {
+    let folder = CliDirectory::new();
+    let session_file = folder.0.join("account-session.json");
+    let password = "fixture-private-password";
+    let account = json!({"result":1,"msg":{"puid":7,"name":"Fixture Name","phone":"13800000000","schoolname":"school","sex":-1}});
+    let server = FixtureServer::new(vec![
+        (
+            200,
+            json!({"status":true}).to_string(),
+            "Set-Cookie: authenticated=fixture-private-cookie; Path=/; HttpOnly\r\n",
+        ),
+        (200, account.to_string(), ""),
+        (200, account.to_string(), ""),
+    ]);
+    let login = folder
+        .command()
+        .args(["--base-url", &server.url, "--session"])
+        .arg(&session_file)
+        .args([
+            "login",
+            "--phone",
+            "13800000000",
+            "--password-env",
+            "CPASS_FIXTURE_PASSWORD",
+        ])
+        .env("CPASS_FIXTURE_PASSWORD", password)
+        .output()
+        .unwrap();
+    assert!(
+        login.status.success(),
+        "{}",
+        String::from_utf8_lossy(&login.stderr)
+    );
+    let logged_in: Value = serde_json::from_slice(&login.stdout).unwrap();
+    assert_eq!(logged_in["puid"], 7);
+    assert_eq!(logged_in["name"], "***");
+    assert_eq!(logged_in["phone"], "***");
+    let session_bytes = std::fs::read(&session_file).unwrap();
+    let saved: Value = serde_json::from_slice(&session_bytes).unwrap();
+    assert_eq!(saved["version"], 1);
+    assert!(saved["cookies"].is_array());
+    assert!(String::from_utf8_lossy(&session_bytes).contains("fixture-private-cookie"));
+    assert!(!String::from_utf8_lossy(&session_bytes).contains(password));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(&session_file)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
+    let resumed = folder
+        .command()
+        .args(["--base-url", &server.url, "--session"])
+        .arg(&session_file)
+        .arg("account")
+        .env_remove("CPASS_FIXTURE_PASSWORD")
+        .output()
+        .unwrap();
+    assert!(
+        resumed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&resumed.stderr)
+    );
+    assert_eq!(
+        serde_json::from_slice::<Value>(&resumed.stdout).unwrap(),
+        logged_in
+    );
+    assert_eq!(std::fs::read(&session_file).unwrap(), session_bytes);
+    for output in [&login, &resumed] {
+        for bytes in [&output.stdout, &output.stderr] {
+            let text = String::from_utf8_lossy(bytes);
+            assert!(!text.contains(password) && !text.contains("fixture-private-cookie"));
+        }
+    }
+    let requests = server.finish();
+    assert_eq!(requests.len(), 3);
+    assert!(requests[0].starts_with("POST /fanyalogin "));
+    assert!(!requests[0].contains(password));
+    let mut devices = Vec::new();
+    for request in &requests {
+        let user_agent = request
+            .lines()
+            .filter_map(|line| line.split_once(':'))
+            .find(|(name, _)| name.eq_ignore_ascii_case("user-agent"))
+            .unwrap()
+            .1
+            .trim();
+        let imei = user_agent.split_once("(@Kalimdor)_").unwrap().1;
+        assert_eq!(imei.len(), 32);
+        assert!(imei.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        devices.push(user_agent);
+    }
+    for request in &requests[1..] {
+        assert!(request.starts_with("GET /apis/login/userLogin4Uname.do "));
+        assert!(
+            request
+                .to_ascii_lowercase()
+                .contains("cookie: authenticated=fixture-private-cookie")
+        );
+    }
+    assert_eq!(devices[0], devices[1], "login/account must use one device");
+    assert_eq!(
+        devices[1], devices[2],
+        "loading a session in another process must restore its device"
+    );
+}
+
+#[test]
+fn cli_student_login_challenge_preserves_existing_session_without_posting_credentials() {
+    let folder = CliDirectory::new();
+    let session_file = folder.0.join("account-session.json");
+    let session = cpass::transport::Session::new(2, 0, None).unwrap();
+    session
+        .import_cookie("existing=retained-private-cookie")
+        .unwrap();
+    session.save(&session_file).unwrap();
+    let original = std::fs::read(&session_file).unwrap();
+    let server = FixtureServer::new(vec![(200, r#"<input type="hidden" id="fid" value="780"><input type="hidden" id="t" value="true"><input type="hidden" id="needVcode" value="1">"#.into(), "")]);
+    let output = folder
+        .command()
+        .args(["--base-url", &server.url, "--session"])
+        .arg(&session_file)
+        .args([
+            "student-login",
+            "--fid",
+            "780",
+            "--student-id",
+            "fixture-student",
+            "--password-env",
+            "CPASS_FIXTURE_STUDENT_PASSWORD",
+        ])
+        .env("CPASS_FIXTURE_STUDENT_PASSWORD", "fixture-private-password")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("action-required: complete the official institution login captcha"),
+        "{stderr}"
+    );
+    assert!(
+        !stderr.contains("fixture-private-password") && !stderr.contains("retained-private-cookie")
+    );
+    assert_eq!(std::fs::read(&session_file).unwrap(), original);
+    let requests = server.finish();
+    assert_eq!(requests.len(), 1);
+    assert!(requests[0].starts_with("GET /login?loginType=3&newversion=true&fid=780 "));
+    assert!(!requests[0].contains("fixture-private-password"));
+    assert!(!requests[0].contains("fixture-student"));
 }
 
 #[test]
@@ -1953,6 +2392,84 @@ fn cli_resources_and_subjective_review_remain_offline_and_never_fill_an_answer()
     for line in events.lines() {
         serde_json::from_str::<cpass::operations::Event>(line).unwrap();
     }
+}
+
+#[test]
+fn cli_log_write_failure_preserves_success_and_incomplete_business_results() {
+    let folder = CliDirectory::new();
+    let config = folder.0.join("config.yml");
+    let blocked_config = folder.0.join("blocked.yml");
+    let blocked = folder.0.join("blocked-log");
+    std::fs::write(&config, "log_path: logs\nsearchers: []\n").unwrap();
+    std::fs::write(&blocked_config, "log_path: blocked-log\nsearchers: []\n").unwrap();
+    std::fs::write(&blocked, "existing file").unwrap();
+    let fixture =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/work_questions.html");
+    let input = folder.0.join("input.json");
+    let answers = folder.0.join("answers.json");
+    std::fs::write(
+        &input,
+        json!({"id":"mock","title":"log failure","type":1,"questions":[
+            {"id":42,"value":"existing false","type":3,"options":null,"answer":false},
+            {"id":43,"value":"unmatched","type":3,"options":null,"answer":null}
+        ]})
+        .to_string(),
+    )
+    .unwrap();
+    std::fs::write(&answers, "{}").unwrap();
+    for scenario in ["parse", "resolve"] {
+        let mut results = Vec::new();
+        for (label, config_file) in [("control", &config), ("blocked", &blocked_config)] {
+            let destination = folder.0.join(format!("{scenario}-{label}.json"));
+            let report_file = folder.0.join(format!("{scenario}-{label}-report.json"));
+            let mut command = folder.command();
+            command.arg("--config").arg(config_file).arg(scenario);
+            if scenario == "parse" {
+                command.args(["--kind", "work", "--input"]).arg(&fixture);
+            } else {
+                command
+                    .arg("--input")
+                    .arg(&input)
+                    .arg("--answers")
+                    .arg(&answers);
+            }
+            let output = command
+                .arg("--output")
+                .arg(&destination)
+                .arg("--report")
+                .arg(&report_file)
+                .output()
+                .unwrap();
+            assert_eq!(
+                output.status.code(),
+                Some(if scenario == "parse" { 0 } else { 1 })
+            );
+            assert!(output.stdout.is_empty());
+            let error = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(
+                error.contains("结构化日志写入失败，业务结果已保留"),
+                label == "blocked"
+            );
+            if scenario == "resolve" {
+                assert!(error.contains("存在未匹配／未完成题目"));
+            }
+            let exported: Value =
+                serde_json::from_slice(&std::fs::read(destination).unwrap()).unwrap();
+            let report: Value =
+                serde_json::from_slice(&std::fs::read(report_file).unwrap()).unwrap();
+            results.push((exported, report));
+        }
+        assert_eq!(results[0], results[1]);
+        if scenario == "resolve" {
+            assert_eq!(results[1].0["questions"][0]["answer"], false);
+            assert!(results[1].0["questions"][1]["answer"].is_null());
+            assert_eq!(results[1].1["existing"], 1);
+            assert_eq!(results[1].1["incomplete"], 1);
+            assert_eq!(results[1].1["final_submitted"], false);
+        }
+        assert_eq!(std::fs::read_to_string(&blocked).unwrap(), "existing file");
+    }
+    assert!(!folder.0.join("session").exists());
 }
 
 #[test]

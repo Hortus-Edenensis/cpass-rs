@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use crate::course::Course;
 use crate::model::Question;
 use crate::questions::{PageKind, ParsedPaper, exam_form, parse_page, valid_answer};
-use crate::transport::{Params, Session, exam_signature, imei};
+use crate::transport::{Params, Session, exam_signature};
 
 const LIST: &str = "https://mooc1-api.chaoxing.com/exam/phone/task-list";
 const COVER: &str = "https://mooc1-api.chaoxing.com/exam-ans/exam/phone/task-exam";
@@ -332,7 +332,7 @@ impl Exam {
             ("examAnswerId".into(), self.answer_id.to_string()),
             ("cpi".into(), self.info.cpi.to_string()),
             ("keyboardDisplayRequiresUserAction".into(), "1".into()),
-            ("imei".into(), imei()),
+            ("imei".into(), self.session.imei()),
             ("faceDetection".into(), u8::from(self.need_face).to_string()),
             (
                 "facekey".into(),
@@ -386,7 +386,7 @@ impl Exam {
             ("classId".into(), self.info.class_id.to_string()),
             ("source".into(), "0".into()),
             ("cpi".into(), self.info.cpi.to_string()),
-            ("imei".into(), imei()),
+            ("imei".into(), self.session.imei()),
             ("enc".into(), self.enc.clone()),
             ("remainTimeParam".into(), self.enc_remain_time.to_string()),
             (
@@ -597,7 +597,7 @@ impl Exam {
             ("classId".into(), self.info.class_id.to_string()),
             ("type".into(), "0".into()),
             ("isphone".into(), "true".into()),
-            ("imei".into(), imei()),
+            ("imei".into(), self.session.imei()),
             ("subCount".into(), "".into()),
             ("remainTime".into(), self.remain_time.to_string()),
             ("tempSave".into(), temp_save.into()),
@@ -801,6 +801,7 @@ mod tests {
         assert!(query.contains(&("qid".into(), "9".into())));
         assert!(query.contains(&("tempSave".into(), "true".into())));
         assert_eq!(form["answer9"], "false");
+        assert_eq!(form["imei"], exam.session.imei());
         assert_eq!(form["enc"], "latest");
         assert_eq!(form["encLastUpdateTime"], "20");
         question.answer = Value::Null;

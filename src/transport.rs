@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use aes::cipher::{BlockEncryptMut, KeyIvInit, block_padding::Pkcs7};
@@ -39,6 +39,7 @@ pub struct Session {
     client: Client,
     no_redirect: Client,
     cookies: Arc<CookieStoreMutex>,
+    user_agent: Arc<RwLock<String>>,
     retries: u32,
     base: Option<Url>,
 }
@@ -75,7 +76,6 @@ impl Session {
         let client = |policy| {
             Client::builder()
                 .cookie_provider(cookies.clone())
-                .user_agent(mobile_ua())
                 .default_headers({
                     let mut headers = reqwest::header::HeaderMap::new();
                     headers.insert("X-Requested-With", "com.chaoxing.mobile".parse().unwrap());
@@ -90,6 +90,7 @@ impl Session {
             client: client(Policy::limited(10))?,
             no_redirect: client(Policy::none())?,
             cookies,
+            user_agent: Arc::new(RwLock::new(generate_mobile_ua())),
             retries,
             base,
         })
@@ -113,7 +114,13 @@ impl Session {
     }
 
     pub fn imei(&self) -> String {
-        imei()
+        self.user_agent
+            .read()
+            .unwrap_or_else(|error| error.into_inner())
+            .rsplit_once("(@Kalimdor)_")
+            .expect("session user agent has a validated device identifier")
+            .1
+            .to_owned()
     }
 
     fn with_params(&self, raw: &str, params: &[(String, String)]) -> Result<Url> {
@@ -251,6 +258,16 @@ impl Session {
         retry_get: bool,
         inspect_redirect: bool,
     ) -> Result<HttpResponse> {
+        if !headers
+            .keys()
+            .any(|name| name.eq_ignore_ascii_case("user-agent"))
+        {
+            let user_agent = self
+                .user_agent
+                .read()
+                .map_err(|_| anyhow::anyhow!("session device unavailable"))?;
+            request = request.header(reqwest::header::USER_AGENT, user_agent.as_str());
+        }
         for (name, value) in headers {
             request = request.header(name.as_str(), value.as_str());
         }
@@ -380,6 +397,10 @@ impl Session {
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
+        let user_agent = self
+            .user_agent
+            .read()
+            .map_err(|_| anyhow::anyhow!("session device unavailable"))?;
         let mut bytes = Vec::new();
         let store = self
             .cookies
@@ -389,7 +410,10 @@ impl Session {
             .map_err(|_| anyhow::anyhow!("could not serialize cookies"))?;
         drop(store);
         let cookies: Value = serde_json::from_slice(&bytes)?;
-        let data = serde_json::to_vec_pretty(&json!({"version": 1, "cookies": cookies}))?;
+        let data = serde_json::to_vec_pretty(
+            &json!({"version": 1, "cookies": cookies, "user_agent": &*user_agent}),
+        )?;
+        drop(user_agent);
         let parent = path
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
@@ -431,6 +455,10 @@ impl Session {
             .context("cannot read session file")?;
         let value: Value =
             serde_json::from_str(&data).map_err(|_| anyhow::anyhow!("invalid session file"))?;
+        let saved_user_agent = value
+            .get("user_agent")
+            .map(validate_user_agent)
+            .transpose()?;
         if let Some(cookies) = value.get("cookies") {
             ensure!(
                 value.get("version").and_then(Value::as_u64) == Some(1),
@@ -439,13 +467,25 @@ impl Session {
             let bytes = serde_json::to_vec(cookies)?;
             let store = cookie_store::serde::json::load(bytes.as_slice())
                 .map_err(|_| anyhow::anyhow!("invalid scoped cookies"))?;
-            *self
+            let mut user_agent = self
+                .user_agent
+                .write()
+                .map_err(|_| anyhow::anyhow!("session device unavailable"))?;
+            let mut cookies = self
                 .cookies
                 .lock()
-                .map_err(|_| anyhow::anyhow!("cookie store unavailable"))? = store;
+                .map_err(|_| anyhow::anyhow!("cookie store unavailable"))?;
+            *cookies = store;
+            if let Some(saved) = saved_user_agent {
+                *user_agent = saved;
+            }
             return Ok(());
         }
         let legacy = value.get("ck").context("session contains no cookies")?;
+        let mut user_agent = self
+            .user_agent
+            .write()
+            .map_err(|_| anyhow::anyhow!("session device unavailable"))?;
         match legacy {
             Value::String(cookie) => self.import_cookie(cookie),
             Value::Object(cookies) => {
@@ -459,8 +499,31 @@ impl Session {
                 self.import_cookie(&values.join(";"))
             }
             _ => bail!("invalid legacy cookie format"),
+        }?;
+        if let Some(saved) = saved_user_agent {
+            *user_agent = saved;
         }
+        Ok(())
     }
+}
+
+fn validate_user_agent(value: &Value) -> Result<String> {
+    let ua = value
+        .as_str()
+        .filter(|ua| {
+            ua.len() <= 1024
+                && ua.starts_with("Dalvik/2.1.0 (Linux; U; Android ")
+                && ua
+                    .bytes()
+                    .all(|byte| byte.is_ascii_graphic() || byte == b' ')
+                && reqwest::header::HeaderValue::from_str(ua).is_ok()
+                && ua.split("(@Kalimdor)_").count() == 2
+                && ua.rsplit_once("(@Kalimdor)_").is_some_and(|(_, imei)| {
+                    imei.len() == 32 && imei.bytes().all(|byte| byte.is_ascii_hexdigit())
+                })
+        })
+        .context("invalid session user agent")?;
+    Ok(ua.to_owned())
 }
 
 pub fn timestamp() -> u64 {
@@ -508,12 +571,20 @@ pub fn encrypt_login(value: &str) -> Result<String> {
 
 pub fn mobile_ua() -> String {
     static UA: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    UA.get_or_init(|| {
-        let imei = random_hex(16);
-        let model = format!("MI{}", rand::rng().random_range(10..=12));
-        let sign = format!("(schild:ipL$TkeiEmfy1gTXb2XHrdLN0a@7c^vu) (device:{model}) Language/zh_CN com.chaoxing.mobile/ChaoXingStudy_3_6.3.9_android_phone_10824_250 (@Kalimdor)_{imei}");
-        format!("Dalvik/2.1.0 (Linux; U; Android {}; {model} Build/SKQ1.211006.001) (schild:{:x}) (device:{model}) Language/zh_CN com.chaoxing.mobile/ChaoXingStudy_3_6.3.9_android_phone_10824_250 (@Kalimdor)_{imei}", rand::rng().random_range(9..=12), md5::compute(sign))
-    }).clone()
+    UA.get_or_init(generate_mobile_ua).clone()
+}
+
+fn generate_mobile_ua() -> String {
+    let imei = random_hex(16);
+    let model = format!("MI{}", rand::rng().random_range(10..=12));
+    let sign = format!(
+        "(schild:ipL$TkeiEmfy1gTXb2XHrdLN0a@7c^vu) (device:{model}) Language/zh_CN com.chaoxing.mobile/ChaoXingStudy_3_6.3.9_android_phone_10824_250 (@Kalimdor)_{imei}"
+    );
+    format!(
+        "Dalvik/2.1.0 (Linux; U; Android {}; {model} Build/SKQ1.211006.001) (schild:{:x}) (device:{model}) Language/zh_CN com.chaoxing.mobile/ChaoXingStudy_3_6.3.9_android_phone_10824_250 (@Kalimdor)_{imei}",
+        rand::rng().random_range(9..=12),
+        md5::compute(sign)
+    )
 }
 
 pub fn imei() -> String {
@@ -644,6 +715,103 @@ pub(crate) fn test_server(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn persisted_device_is_shared_restored_validated_and_allows_desktop_override() {
+        let path =
+            std::env::temp_dir().join(format!("cpass-device-{:016x}.json", rand::random::<u64>()));
+        let (base, server) = test_server(vec![("", b"{}".to_vec()); 3]);
+        let initial = Session::new(2, 0, Some(&base)).unwrap();
+        initial
+            .import_cookie("UID=123; token=PRIVATE_COOKIE")
+            .unwrap();
+        initial.save(&path).unwrap();
+        let saved: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let ua = saved["user_agent"].as_str().unwrap();
+        assert!(ua.ends_with(&initial.imei()));
+        let restored = Session::new(2, 0, Some(&base)).unwrap();
+        assert_ne!(restored.imei(), initial.imei());
+        let shared = restored.clone();
+        restored.load(&path).unwrap();
+        assert_eq!(restored.imei(), initial.imei());
+        assert_eq!(shared.imei(), initial.imei());
+        shared
+            .get("https://mooc1.chaoxing.com/mobile", &[])
+            .unwrap();
+        restored
+            .get_with_headers(
+                "https://passport2.chaoxing.com/login",
+                &[],
+                &BTreeMap::from([("uSeR-aGeNt".into(), "Mozilla/5.0 desktop-fixture".into())]),
+            )
+            .unwrap();
+        shared
+            .get("https://mooc1.chaoxing.com/mobile-again", &[])
+            .unwrap();
+        let requests = server.join().unwrap();
+        for (index, request) in requests.iter().enumerate() {
+            let request = String::from_utf8_lossy(request);
+            let headers: Vec<_> = request
+                .lines()
+                .filter_map(|line| line.split_once(':'))
+                .filter(|(name, _)| name.eq_ignore_ascii_case("user-agent"))
+                .map(|(_, value)| value.trim())
+                .collect();
+            assert_eq!(
+                headers,
+                vec![if index == 1 {
+                    "Mozilla/5.0 desktop-fixture"
+                } else {
+                    ua
+                }]
+            );
+        }
+        for invalid in [
+            Value::Null,
+            json!(format!("{ua}\r\nPRIVATE_HEADER: secret")),
+            json!(ua.replace(&initial.imei(), "PRIVATE_BAD_IMEI")),
+            json!(format!(
+                "Dalvik/2.1.0 (Linux; U; Android {} (@Kalimdor)_{}",
+                "x".repeat(1024),
+                initial.imei()
+            )),
+        ] {
+            fs::write(
+                &path,
+                json!({"ck":"UID=999; token=PRIVATE_REPLACEMENT", "user_agent":invalid})
+                    .to_string(),
+            )
+            .unwrap();
+            let error = restored.load(&path).unwrap_err().to_string();
+            assert_eq!(error, "invalid session user agent");
+            assert_eq!(shared.imei(), initial.imei());
+            assert_eq!(shared.cookie_value("UID").as_deref(), Some("123"));
+        }
+        let other_ua = generate_mobile_ua();
+        fs::write(
+            &path,
+            json!({"version":1,"cookies":"invalid","user_agent":other_ua}).to_string(),
+        )
+        .unwrap();
+        assert!(restored.load(&path).is_err());
+        assert_eq!(shared.imei(), initial.imei());
+        assert_eq!(
+            shared.cookie_value("token").as_deref(),
+            Some("PRIVATE_COOKIE")
+        );
+
+        let legacy_reader = Session::new(2, 0, None).unwrap();
+        let legacy_imei = legacy_reader.imei();
+        let mut old_v1 = saved;
+        old_v1.as_object_mut().unwrap().remove("user_agent");
+        for old in [old_v1, json!({"ck":"UID=123"}), json!({"ck":{"UID":"123"}})] {
+            fs::write(&path, old.to_string()).unwrap();
+            legacy_reader.load(&path).unwrap();
+            assert_eq!(legacy_reader.imei(), legacy_imei);
+            assert_eq!(legacy_reader.cookie_value("UID").as_deref(), Some("123"));
+        }
+        fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn transport_timeouts_bound_get_retries_and_never_replay_exam_start() {

@@ -30,6 +30,8 @@ cpass resolve --input questions.json --answers local-answers.json --output resol
 
 ## 登录和多会话
 
+每个会话保存自己的移动 User-Agent 与设备标识，重新启动后恢复同一标识；考试请求使用该会话标识。旧 Cookie 存档仍可导入，首次重新保存时补齐设备信息。
+
 配置默认读取当前目录 `config.yml`；`--config` 可选择其它文件，配置路径相对该文件解析。`--session` 选择会话存档，默认使用配置 session_path 下的 `default.json`。
 
 ```bash

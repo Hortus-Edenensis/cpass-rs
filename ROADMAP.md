@@ -32,12 +32,12 @@
 | 第三方题库 | Enncy、Cx、TiKuHai、LyCk6、Muke、Lemon | 六来源固定协议响应 | 各服务现网协议/额度可用 |
 | 模型 | OpenAI 兼容与 Ollama，返回原始答案 | 本地请求、原始文本与异常隔离 | 自有服务可达且答案经严格匹配 |
 | 导出/报告 | 旧题目 JSON、独立处理报告、图片/公式 manifest、已批阅只读导出 | JSON 往返；合成批阅 HTML 与资源校验 | 原导出兼容；真实批阅标签和资源核对 |
-| 批量/TUI | 多课程顺序执行、checkpoint 校验、平台状态复核、文本菜单 | 42 项 CLI/HTTP 集成本机通过；业务源码三平台 CI 通过 | 中断重启不凭旧 checkpoint 误报完成 |
+| 批量/TUI | 多课程顺序执行、checkpoint 校验、平台状态复核、文本菜单 | 47 项 CLI/HTTP 集成本机通过；业务源码三平台 CI 通过 | 中断重启不凭旧 checkpoint 误报完成 |
 | 直播/文章 | 官方链接与人工观看/阅读接续，重新拉取卡片确认 | 新旧状态 fixture、拒绝伪造回执 | 真人操作后任务点 fresh 回执完成 |
 | 主观题 | 人工审核材料，可选搜索草稿 | 字段与禁止自动提交检查 | 人工判断正确性；没有自动答题/提交 |
 | OCR | 外部 Tesseract 有界进程、人工确认提示 | 模拟进程/超时；容器真实 Tesseract 固定图片 | 真实验证码识别及人工核对 |
 | 诊断/通知 | 脱敏 JSONL、轮转/保留、诊断白名单、Gotify/MQTT QoS 1 | 本地 HTTP/TCP 接收回执、诊断过滤 | 自有通知服务接收；敏感信息不进入事件 |
-| 构建/交付 | Cargo.lock、Rust Docker、跨平台 CI、二进制打包 | 本机 fmt/clippy、111 项测试与 release 通过；业务源码 Docker/CI 通过 | 按实际平台另验登录、任务点和提交 |
+| 构建/交付 | Cargo.lock、Rust Docker、跨平台 CI、二进制打包 | 本机 fmt/clippy、117 项测试与 release 通过；业务源码 Docker/CI 通过 | 按实际平台另验登录、任务点和提交 |
 
 ## M0：冻结规则与可复现基线（本轮）
 
@@ -68,7 +68,7 @@
 
 文件：`src/transport.rs`、`src/account.rs`。
 
-1. 一份会话共享客户端、Cookie 和固定 IMEI。登录、移动 UA、考试参数使用一致设备标识。
+1. 一份会话共享客户端、Cookie 和固定 IMEI；新存档保存完整移动 UA，跨进程恢复后保持设备标识一致。登录、移动 UA、考试参数使用同一会话设备标识，官方桌面 UA 请求仍保留调用方设置。
 2. Python `quote_plus` 的字节级编码与有序参数签名保持兼容，签名有固定 golden。
 3. 普通 GET 仅有限重试；开考 GET、POST/交卷不自动重放。HTTP 错误、登录过期与验证挑战明确返回。
 4. Cookie 按域和过期时间保存，兼容旧存档；无密码持久化，Unix 会话文件仅所有者可读写。
@@ -118,9 +118,20 @@
 
 验收：所有搜索请求用 localhost 响应，测试不得消耗真实额度；CLI help/配置/离线解析可运行；容器和三平台发布要各自保留真实构建证据。
 
-## M6：上线验收与替换默认运行（后续验收）
+## M6：业务验收与替换默认运行
 
-此阶段需要真实平台与账号，不能用离线通过替代。
+本轮按用户指示继续 mock 验收，用真实 localhost HTTP 与独立 CLI 进程证明流程合同；现网验收另列，不将模拟回执当作平台接受或批阅结果。
+
+| Mock 验收 | 覆盖范围 | 可复现测试 |
+|---|---|---|
+| 密码登录与重启 | 加密登录、Cookie/UID恢复、打码、会话权限、跨进程 UA/IMEI一致 | `cli_password_login_persists_session_cookie_and_device_across_processes` |
+| 学号登录挑战 | 挑战阻断 credentials POST，已有会话字节保留 | `cli_student_login_challenge_preserves_existing_session_without_posting_credentials` |
+| 四题型作业 | 单选、多选、两空填空、已有 False；保存/交卷分别确认；已有空位冲突不覆盖/不交卷 | `mock_work_four_types_preserve_existing_answers_and_separate_save_from_final` |
+| 四题型考试 | 四页全部核对、3次新答案提交、已有 False不重复提交；动态enc及UA/IMEI一致；部分答案阻断最终交卷 | `mock_exam_four_types_verify_pages_dynamic_receipts_and_incomplete_guard` |
+| 日志失败隔离 | 成功与未完成退出码、题目JSON/报告均保留；原日志目标不覆盖 | `cli_log_write_failure_preserves_success_and_incomplete_business_results` |
+| 其它业务 | 课程/章节/任务、媒体回执、批量恢复、模型/题库、资源/批阅、TUI、通知与OCR边界 | 现有 `cargo test --locked` 库与 CLI/HTTP 集成 |
+
+以下真实平台与账号验收仍需相应输入。
 
 | 顺序 | 工作 | 通过标准 | 失败处理 |
 |---|---|---|---|
@@ -141,17 +152,17 @@
 
 | 项目 | 代码与入口 | 离线状态 | 在线状态与通过标准 |
 |---|---|---|---|
-| 多课程批量/恢复 | `src/main.rs`：`run-batch --course-id … --resume …`；每课程写 checkpoint，账户/课程/班级校验 | 42 项 CLI/HTTP 集成通过，覆盖 checkpoint 恢复与账户/课程边界 | 待验：中断后用同账户与相同列表恢复，fresh 平台状态跳过已完成任务，未完成继续；不恢复考试提交 |
-| 结构化日志 | `src/operations.rs` 受限 Event；`src/main.rs` 命令与答题阶段计数 | 库测试已测事件隔离；原生 CLI 已验证 3.51 MiB 日志轮转、新日志权限 0600 | 待验：错误不写 Cookie/token/密码/原始响应；日志失败不抹去业务结果 |
+| 多课程批量/恢复 | `src/main.rs`：`run-batch --course-id … --resume …`；每课程写 checkpoint，账户/课程/班级校验 | 47 项 CLI/HTTP 集成通过，覆盖 checkpoint 恢复与账户/课程边界 | 待验：中断后用同账户与相同列表恢复，fresh 平台状态跳过已完成任务，未完成继续；不恢复考试提交 |
+| 结构化日志 | `src/operations.rs` 受限 Event；`src/main.rs` 命令与答题阶段计数 | 库测试已测事件隔离；CLI 回归验证日志失败保持业务结果；原生 CLI 已验证 3.51 MiB 日志轮转、新日志权限 0600 | 真实运行另验：错误脱敏与长期日志环境；日志失败隔离已有临时目录和CLI回归证据 |
 | 日志保留/诊断 | `events.jsonl` 超过 3 MiB 轮转，默认保留 30 天；`diagnose --output …` | 原生 CLI 已验证过期受管归档删除、未来归档及非受管文件保留、27 万无效行丢弃、诊断 0600 与拒绝覆盖 | 待验：用户目录长期运行清理仅作用于受管理归档；诊断能复现阶段且不含个人字段 |
 | 短信登录 | `account::request_sms/login_sms`；`sms-request/sms-login` | 新增协议 fixture 与登录链路测试 | 待验：真实发送、手工输入、过期/挑战、账户验证和会话重启；发送成功不等于登录成功 |
 | 学号登录 | 机构检索 `institutions`；`student-login --fid … --student-id …` | 请求参数与失败分支库测试 | 待验：真实机构与学号登录，图形挑战可人工接续；不把学生号当手机号 |
 | 直播/文章 | `course::TaskKind::{Live,Article}`；`media::run_live/run_article` | 库测试已测类型映射及重新取卡片回执 | 待验：官方客户端真人观看/阅读后重新读取任务点，未完成返回 action_required；不生成观看时长或完成标志 |
 | 图片/公式导出 | `resources::extract/download`；`resources` 与 `work-export` | 库测试已测资源关联与域名限制；公开官方 logo 下载 23472 字节、PNG 校验及拒覆盖已实测（合成题号 42，无账户） | 待验：真实 HTML 资源关联及可下载图片；manifest 与 QuestionSet 分离，下载须明确 `--download` |
 | 已批阅只读导出 | `resources::parse_review`、`Work::fetch_review`；`review-export/work-export --reviewed` | 合成 HTML 已测标签/解释隔离；真实 CLI 只读导出及已批阅 save 拒绝回归通过 | 待真实 HTML：提交答案、标准答案、得分逐项与平台核对；缺字段不猜，不将标准答案作为提交候选 |
-| 可选文本 TUI | `tui`；登录、账户、课程、章节、任务、执行与考试列表复用 CLI | 真实 stdin 的预览/保存/交卷三路径集成及本机 TUI 退出通过；业务源码三平台 release smoke 已通过 | 待交互验收：写入与最终交作业分别确认，不复制考试状态机 |
+| 可选文本 TUI | `tui`；登录、账户、课程、章节、任务、执行与考试列表复用 CLI | 真实 stdin 的预览/保存/交卷三路径集成及本机 TUI 退出通过；业务源码三平台 release smoke 已通过 | Mock交互已验：写入与最终交作业分别确认；真实平台联动另验 |
 | 本地 OCR | `operations::ocr_hint`；`ocr --image …`；配置 executable/language/timeout | 库测试已测 PNG/JPEG、有限输出、超时清理；真实容器已识别固定图片并要求人工确认 | 待验：真实验证码识别，用户核对后另行提交；OCR 输出本身不证明验证通过 |
-| 主观题辅助 | `review --input … [--suggest]`；只整理既有类型 4/5/6/7/9/10 | CLI 草稿/禁止提交回归通过，包含在 42 项集成中 | 人工审核材料与建议；不扩展四题型有效答案规则、不自动提交、不声明平台正确 |
+| 主观题辅助 | `review --input … [--suggest]`；只整理既有类型 4/5/6/7/9/10 | CLI 草稿/禁止提交回归通过，包含在 47 项集成中 | 人工审核材料与建议；不扩展四题型有效答案规则、不自动提交、不声明平台正确 |
 | Gotify 通知 | 独立 HTTP 客户端、HTTPS、请求头环境变量 token、有效消息 ID 回执 | 库测试已测本地请求和回执；CLI 成功/失败 notify 事件可诊断且不递归发送 | 待自有服务验收：服务接受事件可核查；失败不影响任务报告 |
 | MQTT 通知 | `mqtt://` MQTT 3.1.1、QoS 1、匹配 PUBACK；环境变量凭据 | 库测试已测 CONNECT/PUBLISH/PUBACK 与失败隔离；通知事件独立记录 | 待自有代理/服务验收：仅明示明文 opt-in；凭据仅回环地址，TLS 通过本地代理，无原生 mqtts 支持 |
 
@@ -171,13 +182,13 @@
 
 | 阶段 | 代码 | 已有证据 | 尚需证据 |
 |---|---|---|---|
-| M0 | 已实现并离线验证 | Python 3.10/3.11 各 35 项回归；Rust 69 库 + 42 集成本机通过；业务源码最低版本 CI 通过 | 真实平台输入兼容性另按 M6 验收 |
+| M0 | 已实现并离线验证 | Python 3.10/3.11 各 35 项回归；Rust 70 库 + 47 集成本机通过；业务源码最低版本 CI 通过 | 真实平台输入兼容性另按 M6 验收 |
 | M1 | 已实现 | 严格解析、判定与来源边界库测试 | 四题型在线批阅另验 |
 | M2 | 已实现 | 登录/会话/签名/人工挑战离线检查 | 真实账号及风控接续 |
 | M3 | 已实现 | 课程/任务/媒体库测试和本地协议 fixture | 平台实际任务点与 fresh 回执 |
 | M4 | 已实现并离线验证 | 作业缓存/提交守卫、考试边界及完整 localhost HTTP 集成通过 | 授权真实作业/考试及平台回执 |
-| M5 | 已实现并离线验证 | 搜索源/配置、fmt/clippy/release 与 111 项本机测试通过；业务源码 Docker/三平台/最低版本 CI 通过 | 第三方与自有服务现网验收 |
-| M6 | 待真实平台验收 | 离线验收标准已确定 | 测试会话、明确可执行课程/作业/考试范围和平台回执 |
+| M5 | 已实现并离线验证 | 搜索源/配置、fmt/clippy/release 与 117 项本机测试通过；业务源码 Docker/三平台/最低版本 CI 通过 | 第三方与自有服务现网验收 |
+| M6 | Mock验收通过，现网待验 | 四题型整卷及跨进程会话、挑战、日志故障验收通过；70库+47集成，结果见 VALIDATION | 测试会话、明确可执行课程/作业/考试范围和平台回执 |
 | M7 | 已实现并离线验证 | 库与 CLI 集成、日志烟测、公开资源下载通过；真实 Tesseract 固定图片容器证据保留；业务源码容器 CI 通过 | 真实短信/批阅/通知、真人观看阅读接续与验证码识别率 |
 
 这些状态以当前证据为准；新增构建或在线结果应更新 [VALIDATION.md](VALIDATION.md)，不能仅改完成标记。
