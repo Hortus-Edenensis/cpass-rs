@@ -132,6 +132,6 @@ dmypy.json
 .vscode/
 
 session/*.json
-questions.*
+/questions.*
 export/*
 faces/*

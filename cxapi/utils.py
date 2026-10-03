@@ -1,10 +1,15 @@
+import hashlib
 import random
+import re
 import secrets
 import time
 import urllib.parse
-import hashlib
+from copy import copy
+from html import unescape
 from math import floor
 from typing import Literal
+
+from bs4.element import Comment
 
 # API 环境参数
 IMEI = secrets.token_hex(16)  # 设备uuid 生成随机即可
@@ -151,3 +156,74 @@ def remove_escape_chars(text: str) -> str:
         .replace("\u200b", "")
         .replace("\u3000", "")
     )
+
+
+def normalize_text(text: str) -> str:
+    """清理实体和排版字符，保留大小写、公式及标点。"""
+    return " ".join(re.sub(r"[\u200b\u200c\u200d\u2060\ufeff]", "", unescape(text)).split())
+
+
+def html_text(node) -> str:
+    """保留行内文字连接以及显式段落、换行。"""
+    if node is None:
+        raise ValueError("缺少正文节点")
+    node = copy(node)
+    for text in list(node.find_all(string=True)):
+        if isinstance(text, Comment):
+            text.extract()
+            continue
+        # 源码缩进不是题干换行；只有块元素和 br 产生换行。
+        value = re.sub(r"\s+", " ", text)
+        text.replace_with("" if not text.strip() and "\n" in text else value)
+    for tag in node.select("script, style, input, button"):
+        tag.decompose()
+    for tag in node.select("br"):
+        tag.replace_with("\n")
+    for tag in node.select("p, div, li"):
+        tag.insert_before("\n")
+        tag.insert_after("\n")
+    return "\n".join(
+        text for line in node.get_text().splitlines() if (text := normalize_text(line))
+    )
+
+
+_QUESTION_TYPE_NAMES = (
+    "单选题|多选题|填空题|判断题|简答题|名词解释|论述题|计算题|其它|分录题|资料题|连线题|" "排序题|完型填空|阅读理解|口语题|听力题|共用选项题|测评题"
+)
+
+
+def question_type_label(node):
+    if node is None:
+        return None
+    for tag in node.select("span, strong, b"):
+        label = tag.get_text()
+        if re.fullmatch(_QUESTION_TYPE_NAMES, normalize_text(label)):
+            prefix = normalize_text(node.get_text().split(label, 1)[0])
+            if re.fullmatch(r"(?:\d+\s*[.．、])?", prefix):
+                return tag
+    return None
+
+
+def question_text(node, *, exam: bool = False) -> str:
+    if node is None:
+        raise ValueError("缺少题干")
+    node = copy(node)
+    if exam:
+        for heading in node.select("h3"):
+            heading.decompose()
+    label = question_type_label(node)
+    if label is not None:
+        label.decompose()
+    text = html_text(node)
+    # 只剥离位于开头的题号、题型及分值元数据，避免吞掉正文中的数字或括号。
+    text = re.sub(r"^\s*\d+\s*[.．、](?!\d)\s*", "", text)
+    text = re.sub(
+        rf"^\s*[（(【\[]\s*(?:{_QUESTION_TYPE_NAMES})"
+        r"(?:\s*[,，]\s*\d+(?:\.\d+)?\s*分)?\s*[）)】\]]\s*",
+        "",
+        text,
+    )
+    text = re.sub(r"^\s*[（(]\s*\d+(?:\.\d+)?\s*分\s*[）)]\s*", "", text)
+    if not text.strip():
+        raise ValueError("题干为空")
+    return text.strip()

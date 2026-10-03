@@ -1,332 +1,198 @@
-<div align="center">
-    <h1>超星学习通答题姬</h1>
-    <h2>CxKitty</h2>
-    <img alt="Github Stars" src="https://img.shields.io/github/stars/SocialSisterYi/CxKitty">
-    <img alt="Github Forks" src="https://img.shields.io/github/forks/SocialSisterYi/CxKitty">
-    <img alt="Github License" src="https://img.shields.io/github/license/SocialSisterYi/CxKitty">
-    <img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-000000.svg">
-    <img alt="Image Size" src="https://img.shields.io/docker/image-size/socialsisteryi/cx-kitty">
-</div>
+# cpass-rs
 
-本项目旨在研究学习爬虫技术和网络接口编程技术，同时致力于以开源方式抵制并消灭各种付费“刷课平台”和“黑产”
+原生 Rust 超星课程、作业与考试客户端。详细阶段、能力矩阵、验收标准见 [ROADMAP.md](ROADMAP.md)。Python 基线保留在仓库中供对照和回退，原说明见 [docs/PYTHON-BASELINE.md](docs/PYTHON-BASELINE.md)。
 
-<span style="color: red"><b>Ps: 本项目不提供任何题库资源，有相关测试需求者请按照文档自行解决。本项目仅供学习参考使用，请在下载部署后 24 小时内删除，由于使用本项目不当所造成的挂科或不良学习记录作者一概不负责。</b></span>
+答案采用严格策略：**完整且唯一才填，保留有效已有答案，只补未答部分**。四种题型统一匹配；未知题型、来源冲突、缺题和提交失败均阻止交卷。`false` 是有效判断答案，`null` 始终表示未答。Oaifree 已移除。
 
-# notice
-
-重要通知：项目**归档**，新项目将在**不久后回归**
-
-## ✨Features
-
-### Supports
-
-- 会话管理
-  - ✅支持手机号+密码登录、二维码登录，可以自动 / 手动重登账号
-  - ✅内置多账号管理器，自动存取账号信息，自动判断会话 ck 有效性，以 json 格式存档在本地
-- 交互
-  - ✅以 Terminal-UI 方式进行人机交互，展示工作流程、章节任务点状态，输出详细信息到 log 文件，作为一个理工男，不觉得很酷吗？
-  - ✅批量选择课程（使用序号 / courseId / 课程名）
-- 协议实现
-  - ✅使用 [requests](https://github.com/psf/requests) 及 [bs4](https://www.crummy.com/software/BeautifulSoup/) 分别进行协议模拟和 HTML 解析，故无需浏览器，更无需油猴脚本
-  - ✅无惧接口风控，基于 [OpenCV](https://github.com/opencv/opencv) 与 [ddddocr](https://github.com/sml2h3/ddddocr) 对验证码进行识别，进而解除接口风控状态
-  - ✅接口请求 retry 支持，针对网络环境不佳以及使用移动流量的场景优化
-  - ✅人脸识别弹窗自动上传提交，支持课程进入、任务点进入、考试进入三种类型，可使用预先上传的人脸图片，也可自定义图片上传提交
-- 任务点
-  - ✅视频课程任务点模拟播放（无需消耗流量播放流媒体内容）
-  - ✅文档任务点模拟浏览（如 word ppt pdf 等）
-- 考试及测验
-  - ✅章节测验任务点自动答题，支持单选题、多选题、填空题、判断题，试题未完成可临时保存
-  - ✅课程考试（考试模式）自动答题，支持单选题、多选题、填空题、判断题（使用手机客户端接口）
-  - ✅可以跳过考试承诺书（不支持自动提交）、可以跳过重考须知
-  - ✅自动过滤题干和选项中的空白 Unicode 字符，eg：u+2002、u+200b、u+3000
-  - ✅遇到匹配失败的题，可使用 fuzzer 方式填充答案并提交（默认关闭）
-  - ✅章节测验试题 / 课程考试可完整导出，信息全、无加密无乱码，可导出临时保存的答案，现支持 json 格式
-  - ✅自动答题功能需要至少一种的 **题库后端** 支持，现支持`REST API`、`JSON`、`SQLite`三种类型的 **题库后端**，同时已适配`Enncy`、`网课小工具（Go题）`、`题库海`、`冷月题库`、`Muke题库`、`柠檬题库`六种第三方题库，同时支持 `ChatGPT 在线答题`，可并行搜索，择优匹配答案（建议使用自建题库）
-  - ✅`REST API`类型 **题库后端** （用户接口）支持使用 [JsonPath](https://goessner.net/articles/JsonPath/) 语法进行答案字段提取，允许用户注入 HTTP header 和 params 依赖字段
-  - ✅日志中将记录未完成的题目，并自动导出未完成的题目到 json
-
-### TODO
-
-以下特性有可能逐渐被添加
-
-- ⭕短信验证码登录、学号登录
-- ⭕直播任务点、文章阅读任务点
-- ⭕简答题、论述题等题型支持
-- ⭕富文本答题，匹配选项为图片的情况
-- ⭕使用 Gotify 或 MQTT 上报任务进度以及完成情况
-- ⭕使用 args 直接传参登录账号以及选课
-- ⭕导出已批阅的章节测验
-- ⭕试题自动等待交卷
-
-## ❤️Contributing Guide
-
-若发现程序存在任何 bug 或有好的想法，欢迎提交 Issue，提交 bug 反馈时需要带上报错信息截图（截全）以及对应 log 文件，并说明触发条件
-
-如果有能力一同开发项目，欢迎使用 [PR](https://github.com/SocialSisterYi/CxKitty/pulls) 提交代码（注意合并 Origin 和修改内容
-
-提交 Issue 时应当遵守 **[提问的智慧](https://github.com/ryanhanwu/How-To-Ask-Questions-The-Smart-Way/blob/main/README-zh_CN.md)** 以及[别像弱智一样提问](https://github.com/tangx/Stop-Ask-Questions-The-Stupid-Ways)，切勿以`不懂`、`萌新问个问题`、`小白啥也不会浇浇`、`整个xxx呗`作为标题，否则一律忽略
-
-[Issue](https://github.com/SocialSisterYi/CxKitty/issues) 为本项目的唯一反馈渠道，任何包括不限于在 QQ、B站私信、Telegram、微信 的提问一律忽略
-
-## 🧩Typographical
-
-![](imgs/typo.png)
-
-## 🚀Build
-
-### 💻本地化构建项目
-
-使用 Python 版本 >= 3.10.0
-
-clone 项目到本地，并使用 poetry 安装依赖和管理 venv
+## 构建与验证
 
 ```bash
-git clone 'https://github.com/SocialSisterYi/CxKitty'
-cd CxKitty
-poetry install
+cargo build --release --locked
+cargo fmt --all --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked
+./target/release/cpass --help
 ```
 
-运行主程序
+项目声明最低 Rust 1.88，使用 Rust 2024 edition；本机验证工具链为 Rust 1.97.1。最低版本与跨平台实际验证状态见 [VALIDATION.md](VALIDATION.md)。Rust 主业务运行不需要 Python、Poetry 或 OpenCV；可选 `ocr` 命令调用外部 Tesseract。
+
+## 离线使用
 
 ```bash
-poetry run python3 main.py
+cpass parse --kind work --input work.html --output questions.json --report parse-report.json
+cpass parse --kind exam --input exam.html --output exam.json
+cpass resolve --input questions.json --answers local-answers.json --output resolved.json --report resolve-report.json
 ```
 
-### 🐋使用  Docker  构建项目
+`resolve` 只读取本地 JSON 题库，不调用配置中的在线搜索器，也不发送通知。题库为题干到答案的 JSON 对象，例如 `{"题干": "A", "判断题干": false}`。题干只规范化实体与排版空白，然后精确匹配。重复键或规范化后同题的不同有效答案会报告冲突。
 
-从 DockerHub 拉取最新镜像
+题目 JSON 与旧版一致；考试导出 `type=0`，作业 `type=1`。`parse/resolve` 的题目 JSON 输出到 stdout，处理报告默认输出到 stderr；也可用 `--output/--report` 各自保存。未完成时返回非零，已解析结果仍会保存。上下标保留为 `^{…}` / `_{…}`，MathML 保留树结构，`math/tex` 内容保留在 `\(…\)` 边界内；不会将公式压成普通文字后匹配。
+
+## 登录和多会话
+
+每个会话保存自己的移动 User-Agent 与设备标识，重新启动后恢复同一标识；考试请求使用该会话标识。旧 Cookie 存档仍可导入，首次重新保存时补齐设备信息。
+
+配置默认读取当前目录 `config.yml`；`--config` 可选择其它文件，配置路径相对该文件解析。`--session` 选择会话存档，默认使用配置 session_path 下的 `default.json`。
 
 ```bash
-docker pull socialsisteryi/cx-kitty
+cpass --config config.yml config-check
+cpass sessions
+export CPASS_PASSWORD='自己的密码'
+cpass --session session/account1.json login --phone 13800000000
+unset CPASS_PASSWORD
+cpass --session session/account1.json login --qr
+cpass --session session/account1.json account
+cpass --session session/account1.json courses
 ```
 
-~~或手动构建镜像~~
+密码仅从 `--password-env` 指定的环境变量读取，默认 `CPASS_PASSWORD`，不会写入存档。已有 Cookie 可以从 `CPASS_COOKIE` 用 `import-session` 导入；成功验证账户后才保存。默认打码姓名和手机号。存档兼容旧 Python Cookie 结构，保留域和有效期；Unix 文件权限为 `0600`。
 
-<details>
-<summary>展开</summary>
-
-clone 项目到本地，并开始构建镜像
+短信和学号登录也使用同一会话存档：
 
 ```bash
-git clone 'https://github.com/SocialSisterYi/CxKitty'
-cd CxKitty
-docker build --tag socialsisteryi/cx-kitty .
+cpass institutions --query '学校名称'
+cpass --session session/account1.json sms-request --phone 13800000000
+# 手工读取短信后设置 CPASS_SMS_CODE，再执行；不要把验证码写入命令参数。
+cpass --session session/account1.json sms-login --phone 13800000000
+unset CPASS_SMS_CODE
+cpass --session session/student.json student-login --fid 123 --student-id 20260001
 ```
 
-</details>
+`student-login` 从 `CPASS_PASSWORD` 读取密码，`sms-login` 从 `CPASS_SMS_CODE` 读取验证码，可分别用 `--password-env/--code-env` 换名。短信请求默认国家码 `86`；有图形验证时先人工完成，再用 `--captcha-env` 指向验证结果。发送请求成功与登录成功分别报告。
 
-运行容器
-
-请按实际情况映射以下容器内路径：
-
-`/app/session`会话存档目录
-
-`/app/logs`程序日志目录
-
-`/app/export`试题导出目录 (根据配置文件修改，**如不需要可不映射**)
-
-`/app/faces`人脸上传目录 (根据配置文件修改，**如不需要可不映射**)
-
-`/app/config.yml`程序配置文件
-
-`/app/questions.json`json题库 (根据配置文件修改，**如不需要可不映射**)
-
-`/app/questions.db`sqlite题库 (根据配置文件修改，**如不需要可不映射**)
-
-由于程序使用 TUI，Docker 的日志服务会自动捕获并保存容器的 stdo，所以建议使用参数`--log-opt max-size=xx`限制容器的日志大小，以免造成过多的磁盘占用
+## 课程、任务和作业
 
 ```bash
-docker run -it \
-  --name cx_kitty \
-  -v "$PWD/session:/app/session"  \
-  -v "$PWD/export:/app/export" \
-  -v "$PWD/logs:/app/logs" \
-  -v "$PWD/faces:/app/faces" \
-  -v "$PWD/config.yml:/app/config.yml" \
-  #-v "$PWD/questions.json:/app/questions.json" \
-  #-v "$PWD/questions.db:/app/questions.db" \
-  --log-opt max-size=10m \
-  socialsisteryi/cx-kitty
+cpass chapters --course-id 123 --class-id 456
+cpass tasks --course-id 123 --chapter-id 789 --output tasks.json
+cpass run --course-id 123 --chapter-id 789 --output preview-report.json
+cpass run --course-id 123 --chapter-id 789 --commit --output saved-report.json
+cpass run --course-id 123 --chapter-id 789 --commit --final-submit --output final-report.json
 ```
-### ▶️可执行文件构建 (Windows/Linux/MacOS) (不建议使用)
 
-从[Action](https://github.com/SocialSisterYi/CxKitty/actions/workflows/package-exe.yml)中获取最新的自动构建文件,解压后执行文件
+同一课程多个班级时必须用 `--class-id` 指定。默认读取、匹配和导出；`--commit` 才汇报媒体任务或网络保存答案；`--final-submit` 才允许交作业。配置 enable 字段控制各任务执行。未知任务、坏任务卡和章节刷新失败会留在报告中，其它可获取任务继续。未执行或仅导出的任务仍计未完成，不能被章节总数掩盖；视频只有明确 `isPassed=true` 才计完成，`job=false` 不代表视频已完成。
 
-<details>
-<summary>详细步骤</summary>
-
-
-点击[Action](https://github.com/SocialSisterYi/CxKitty/actions/workflows/package-exe.yml)
-
-右侧点击`绿色的` `最上面`的名为`Package Executable`
-
-跳转后拖到最底下
-
-选择你自己的系统,点一下就会下载
-
-解压出来后,先配置配置文件,然后执行文件就可以正常启动了
- 
-</details>
-
-## 🔨Configuration
-
-### 主程序配置
-
-配置文件使用 Yaml 语法编写，存放于 [config.yml](config.yml)
-
-请根据注释修改配置内容
-
-### 人脸识别配置
-
-人脸识别图片要求必须 .jpg 格式，存放于`face_image_path`配置的路径下，默认为`faces/`
-
-若`fetch_uploaded_face`字段为`true`，在登录成功后立即尝试拉取该用户预先上传的人脸图片，成功后以用户 puid 命名（eg：`114514.jpg`），存放于`face_image_path`配置的路径下，以备需要识别时读取
-
-人脸识别图片还可以自定义，要求图片文件名以 puid 命名，存放于`face_image_path`配置的路径下，但需要注意将`fetch_uploaded_face`设置为`false`，否则登录成功后会被覆盖
-
-也可以为每个自定义一组多张人脸图片，图片以 puid+序号 命名（eg：`114514_1.jpg`、`114514_2.jpg`），程序中使用正则`/\d+(_d+)?\.jpg/`遍历筛选，需要识别人脸时会从这组图片中随机抽取一张并上传
-
-### 题库配置
-
-单选题问题与答案应当一一对应，多选题使用`#`或`;`分隔每个选项，判断题答案只能为`对`、`错`、`正确`、`错误`、`√`、`×`
-
-REST API 搜题接口配置，确保接口`searcher->restApiSearcher->url`可以正确访问访问（若使用 Docker 搭建，而题库 API 服务在宿主机运行，应使用宿主机虚拟网关 IP 地址而不是本地回环地址）
-
-返回值必须为 JSON 格式，使用`rsp_field`字段作为选择器传入，使用 [JsonPath](https://goessner.net/articles/JsonPath/) 语法编写，如`$.data`或`$.data.answer[*]`等
-
-eg：
+从 `tasks.json` 选取一个 Work 对象保存为 `work-task.json`，也可独立运行：
 
 ```bash
-curl 'http://127.0.0.1:88/v1/cx' \
-  --data-urlencode 'question=国字的演变的过程告诉我们,国防就是国家的防务,国防与()是密不可分的'  #  这里`question`为请求字段名
+cpass work --task-file work-task.json --output work-preview.json
+cpass work --task-file work-task.json --commit --final-submit --output work-final.json
 ```
 
-```js
-{
-    "code": 1,
-    "question": "国字的演变的过程告诉我们,国防就是国家的防务,国防与()是密不可分的",
-    "data": "国家",  // 这里的`data`为响应字段名
-    "hit": true
-}
+作业单题的 `cached` 表示本地缓存；`saved` 表示平台临时保存成功；`final_submitted` 表示最终交卷成功。这些字段与答案匹配数分别记录。失败时按旧 `fallback_save` 配置只保存可验证的字段；严格策略忽略 `fallback_fuzzer` 并明确输出提示。
+
+批量课程按给定顺序运行，每门课程结束后写 checkpoint；重新运行会再次读取平台状态：
+
+```bash
+cpass run-batch --course-id 123 234 --resume checkpoint.json --output batch-preview.json
+cpass run-batch --course-id 123 234 --resume checkpoint.json --commit --output batch-saved.json
+cpass --session session/account1.json tui
 ```
 
-JSON 题库，确保`searcher->jsonFileSearcher->file_path`可以访问（使用 Docker 需要设置映射），key 为题目，value 为与之对应的答案
+checkpoint 校验当前 UID、课程列表和班级，不能跨账户或换课程复用；`--resume` 和 `--output` 必须是不同文件。恢复依据平台新读取的任务点状态跳过已完成课程，不将旧 checkpoint 的成功记录当作新回执。批量只处理课程任务，考试仍使用独立命令。TUI 是复用同一 CLI 业务的文本菜单，提供登录、账户、课程、章节、任务、课程执行和考试列表；写入和交作业分别确认。
 
-eg：
+直播、文章任务会返回官方学习链接。需要先在平台真人观看或阅读，再重跑命令刷新卡片；只有新读取的 `isPassed/job` 等状态确认完成后才计完成，不生成观看/阅读完成回执。
 
-```json
-{
-  "国字的演变的过程告诉我们,国防就是国家的防务,国防与()是密不可分的": "国家"
-}
+## 考试
+
+```bash
+cpass exams --course-id 123
+cpass exam --course-id 123 --exam-id 321 --output exam-metadata.json
+cpass exam --course-id 123 --exam-id 321 --start --output exam-preview.json
+cpass exam --course-id 123 --exam-id 321 --start --commit --output exam-submissions.json
+cpass exam --course-id 123 --exam-id 321 --start --commit --final-submit --output exam-final.json
 ```
 
-SQLite 题库，确保`searcher->sqliteSearcher->file_path`可以访问（使用 Docker 需要设置映射），表中应存在配置的请求和响应字段
+`--start` 会请求开始考试并启动平台计时，预览也需要先开始。考试码使用 `--code-env CPASS_EXAM_CODE`。逐页核对题目 ID，保留已有答案，不重复单题提交；动态会话参数只在有效回执后更新。完整预览和答题卡边界、全部逐页确认、无失败且明确指定交卷开关时才最终交卷。
 
-eg：
+验证码与人脸要求返回 `action-required`，先完成真实验证。滑块/图形验证支持 `image-captcha` 与 `image-captcha-submit` 手动坐标接续；收到 validate 后通过 `--captcha-env` 使用。人脸用 `face-upload` 上传原始 JPEG，`course-face/exam-face` 获取实际平台回执；`exam-face --live-status` 必须来自真实客户端结果，将回执文件用 `--face-receipt` 传入考试。普通图片验证码用 `captcha-image/captcha-submit`。各子命令完整参数可用 `--help` 查询。
 
-```sql
-SELECT answer FROM questions WHERE question = '国字的演变的过程告诉我们,国防就是国家的防务,国防与()是密不可分的';
+## 资源、批阅与人工审核导出
+
+```bash
+cpass resources --input work.html --base-url https://mooc1.chaoxing.com/work/view --output resources.json
+cpass resources --input work.html --base-url https://mooc1.chaoxing.com/work/view --download images --output downloaded.json
+cpass review-export --input reviewed.html --base-url https://mooc1.chaoxing.com/work/view --output reviewed.json
+cpass work-export --task-file work-task.json --output work-resources.json
+cpass work-export --task-file work-task.json --reviewed --output work-reviewed.json
+cpass review --input questions.json --output review-drafts.json
+cpass review --input questions.json --suggest --output suggested-drafts.json
 ```
 
+图片 URL/alt、MathML、TeX 存放在独立 manifest，保留题号和选项位置，原题目 JSON 格式不变。`--base-url` 应为保存 HTML 的实际页面地址，用于解析相对资源 URL。只有 `--download` 才下载图片：独立无 Cookie 客户端、可信超星 HTTPS 主机、禁止跳转、每图最多 10 MiB，目标文件已存在则拒绝覆盖。
+
+`work-export` 通过现有作业 GET 入口只读取得页面。批阅导出独立保留 `submitted_answer/reference_answer/score`，只有明确独立标签才提取，解释段不能用于猜答案；无法识别的字段保持空值或解析错误，部分结果先导出再报告未完成。已批阅真实 HTML 仍需按 [ROADMAP.md](ROADMAP.md) 的 M6 验收。
+
+`review` 仅整理简答、名词解释、论述、计算、分录、资料题的人工审核材料；`--suggest` 才查询配置的搜索源生成草稿。输出明确标记 `requires_human_review=true` 和 `automatic_submission=false`，不会把草稿当成四题型有效答案，也不会自动提交主观题。
+
+## OCR、日志与通知
+
+```bash
+cpass captcha-image --output captcha.png
+cpass ocr --image captcha.png --output ocr-hint.json
+# 人工核对图像与候选后设置 CPASS_CAPTCHA，单独提交。
+cpass captcha-submit
+cpass diagnose --output diagnostics.json
 ```
-国家
+
+OCR 需要本机安装 Tesseract；默认可执行程序 `tesseract`、语言 `eng`、超时 10 秒。只接受不超过 5 MiB 的 PNG/JPEG，输出是字母数字提示且始终要求人工确认，不自动提交验证码。诊断命令默认读取 `log_path/events.jsonl`，可用 `--log` 指定；输出文件必须尚不存在。
+
+```yaml
+log_path: logs
+log_retention_days: 30
+ocr:
+  executable: tesseract
+  language: eng
+  timeout_secs: 10
+notifications:
+  enabled: false
+  gotify:
+    url: https://gotify.example.com
+    token_env: CPASS_GOTIFY_TOKEN
+  mqtt:
+    broker: mqtt://127.0.0.1:1883
+    topic: cpass/events
+    username_env: CPASS_MQTT_USER
+    password_env: CPASS_MQTT_PASSWORD
+    allow_plaintext: true
 ```
 
-Enncy 题库，使用前请注册并获取 Token 填写在配置文件中（第三方题库）
+有有效配置文件时，业务命令记录受限字段的 JSONL 事件，不写 Cookie、密码、题干或原始平台响应。日志超过 3 MiB 后轮转；归档按 `log_retention_days` 清理（默认 30 天，范围 1–365）。诊断只接受已知事件字段，丢弃其它行并记录数量；Unix 日志与诊断文件权限为 `0600`。日志写入失败和通知失败不覆盖业务结果。通知成功及失败回执以独立 `notify` 阶段事件写入本地日志，可由 `diagnose` 查询；记录通知回执不会再次触发通知。
 
-通过此 [链接](https://tk.enncy.cn/) 获取 Token
+通知默认关闭，设置 `enabled: true` 后启用所配置的服务。Gotify 使用 HTTPS（本机测试可用 HTTP），token 从指定环境变量读入请求头，以有效消息 ID 确认接受。MQTT 当前实现 MQTT 3.1.1 的 `mqtt://` QoS 1，需要匹配的 PUBACK；没有原生 `mqtts://`，TLS 请通过本地代理接入。明文连接必须显式 `allow_plaintext: true`，带凭据只允许回环地址；凭据不写 broker URL。通知确认仅表示服务接受事件，不表示用户已看到。
 
-网课小工具（Go题）题库，使用前请注册并获取 Token 填写在配置文件中（第三方题库）
+`parse/resolve/resources/review-export/review/ocr` 只记录本地事件，不发送通知。资源下载和主观题搜索仍分别需要显式 `--download`、`--suggest`。
 
-获取 Token 方式见 [文档](https://cx.icodef.com/1-UserGuide/1-6-gettoken.html#%E8%8E%B7%E5%8F%96token)
+## 搜索器与兼容
 
-题库海 题库，使用前请注册并获取 Token 填写在配置文件中（第三方题库）
+保留配置名称：`jsonFileSearcher`、`sqliteSearcher`、`restApiSearcher`、`JsonApiSearcher`、`enncySearcher`、`cxSearcher`、`TiKuHaiSearcher`、`LyCk6Searcher`、`MukeSearcher`、`LemonSearcher`、`OpenAISearcher`、`OllamaSearcherAPI`。名称大小写兼容。
 
-通过此 [链接](https://afdian.net/a/jiaoyu666) 获取 Token
+```yaml
+searchers:
+  - type: jsonFileSearcher
+    file_path: local-answers.json
+  - type: OpenAISearcher
+    base_url: https://api.openai.com/v1/
+    api_key: '$ENV:CPASS_API_KEY'
+    model: your-model
+```
 
-柠檬题库，使用前请注册并获取 Token 填写在配置文件中（第三方题库）
+现有 `config.yml` 的题库字段保持兼容；可添加每源 `timeout_secs`。使用独立 HTTP 客户端，不携带平台 Cookie；模型原文统一交由严格判定，不进行包含式猜选项或否定词改写。坏来源逐源隔离，`config-check` 在不联网的情况下发现初始化错误。
 
-通过此 [链接](https://www.lemtk.xyz) 获取 Token
+旧 TUI 参数保留可读取；Rust 的 `tui` 文本菜单复用 CLI。旧 `confirm_submit` 字段不取消显式交卷开关。原多会话目录、日志/导出/人脸路径字段保留；事件日志、题目导出和执行报告各自独立。API token、登录密码和通知凭据应使用环境变量，不写入配置值、命令参数或诊断材料。
 
-### ChatGPT 在线答题
+## Docker 与发布
 
-ChatGPT 在线答题，使用前请注册并获取 API Key 填写在配置文件中（大语言模型）
+```bash
+docker build -t cpass-rs .
+docker run --rm cpass-rs --help
+docker run --rm -v "$PWD:/data" cpass-rs --config /data/config.yml config-check
+```
 
-可以考虑换成一些 GPT 代理站点，或考虑使用**超高性价比新兴国产开源大模型** [DeepSeek](https://platform.deepseek.com/docs)。
+Docker 默认目录 `/data`，会话与配置通过挂载持久化。生产环境可用 `--user` 指定挂载目录的实际所有者。GitHub Actions 已配置 Linux、macOS、Windows 构建与产物上传；发布事件配置了 Rust 容器构建并推送本仓库 GHCR，实际执行状态以 [VALIDATION.md](VALIDATION.md) 和对应运行记录为准。Python 打包流程仅保留手动回退入口。
 
-DeepSeek 使用与 OpenAI 兼容的 API 格式，只需修改 `base_url` 和 `model` 即可使用。
+## 验证范围
 
-特别注意，尽管 DeepSeek 性价比极高且中文能力相当强，但它的**知识储备不足**且**在部分领域受到较大限制**。
+已实现的协议来自现有 Python 业务链，回归使用离线 HTML 和 localhost HTTP。真实超星登录、风控、人脸、第三方服务现网、平台任务完成与批阅结果需要各自验收。答案能匹配、请求已保存、最终已交卷、平台判对分别报告，不以本地测试代替在线证据。
 
-可在此处查看：[DeepSeek 模型列表](https://platform.deepseek.com/api-docs/zh-cn/#%E6%A8%A1%E5%9E%8B)、[GPT 模型列表](https://platform.openai.com/docs/models)。
-
-## 📖Usage & Demo
-
-**注：本项目并非小白向“开箱即用”类型，需要一定的计算机专业技术能力；如需使用自动答题功能，请确保您拥有准确无误的题库资源**
-
-修改正确的配置文件，并提供配置中定义的资源，运行主程序，进行选择会话存档，若少于一个会话存档，则直接进入登录界面
-
-登录界面输入手机号后按回车键输入密码，再按回车键进行登录
-
-登录界面直接按下回车键则会显示二维码，使用学习通手机客户端扫描登录
-
-![](imgs/demo1.png)
-
-按照提示选择目标课程，多个课程之间使用`,`分隔，使用**课程选择器语法**，如下：
-
-- 课程序号：`0`、`1`、`2`
-- 课程序号范围：`0-3`、`5-10`
-- 课程名：`"解析几何"`、`"马克思主义"`（非重复项可省略后半部分）
-- 课程 courseId：`#23026xxx`、`#22928xx`
-
-![](imgs/demo2.png)
-
-程序会自动完成视频及测验任务点，并展示章节任务点情况
-
-![](imgs/demo3.png)
-
-如需要完成课程`0`、课程`1-3`、课程`解析几何`则输入：`0,1-3,"解析几何"`
-
-如需进入**考试模式**，那么需要在指定课程（使用**课程选择器语法**）前输入`EXAM|`，即可进入二级菜单，如：
-
-`EXAM|0`、`EXAM|"解析几何"`等
-
-若配置文件的`exam->confirm_submit`为`true`那么在交卷前会提示确认，否则将自动交卷
-
-如需导出题库到 export 路径，需在考试选择界面输入`e`+序号
-
-![](imgs/demo4.png)
-
-## 💡About Repo Name
-
-项目的中文名`超星学习通答题姬`早已确定，英文名想到过`CxHime`、`CxExamHime`、`CxCourseHime`然而都非常拗口，故弃用
-
-又想到`CxHelper`这个名，但`helper`一词易使人联想到木马病毒可执行程序的文件名，很不吉利
-
-最后由`CxKit`衍生出`CxKitty`这个名，一语双关`kitty`自有“猫娘”含义，~~同时由于项目首字母缩写是`cxk`，亦可解释为`答题只因`~~
-
-## ⚠️Disclaimers
-
-- 本项目以 [GPL-3.0 License](https://github.com/SocialSisterYi/CxKitty/blob/main/LICENSE) 作为开源协议，这意味着你需要遵守相应的规则
-- 本项目仅适用于**学习研究**，任何人不得以此用于**盈利**
-- 使用本项目造成的任何后果与本人无关
-
-## 📈Stargazers
-
-[![Stargazers over time](https://starchart.cc/SocialSisterYi/CxKitty.svg)](https://starchart.cc/SocialSisterYi/CxKitty)
-
-## 🔗Link Repos
-
-[Samueli924/chaoxing: 超星学习通/超星尔雅/泛雅超星全自动无人值守完成任务点 (github.com)](https://github.com/Samueli924/chaoxing)
-
-[RainySY/chaoxing-xuexitong-autoflush: 超星学习通全自动无人值守视频刷课程序，使用协议发包来实现。 (github.com)](https://github.com/RainySY/chaoxing-xuexitong-autoflush)
-
-[lyj0309/chaoxing-xuexitong-autoflush: 超星学习通全自动无人值守刷课程序，使用协议发包来实现，无需浏览器，支持自动过测验、过视频。 (github.com)](https://github.com/lyj0309/chaoxing-xuexitong-autoflush)
-
-[chettoy/FxxkStar: API and unofficial client for the SuperStar mooc platform | 超星学习通的API和非官方客户端脚本，为学生提供更好的学习体验 (github.com)](https://github.com/chettoy/FxxkStar)
-
-[ocsjs/ocsjs: OCS 网课助手，网课脚本，帮助大学生解决网课难题 ，目前支持网课：超星学习通，知道智慧树 ， 支持脚本猫以及油猴脚本运行。 (github.com)](https://github.com/ocsjs/ocsjs)
-
-[SocialSisterYi/xuexiaoyi-to-xuexitong-tampermonkey-proxy: 基于“学小易”搜题API的学习通答题/考试油猴脚本题库代理 (github.com)](https://github.com/SocialSisterYi/xuexiaoyi-to-xuexitong-tampermonkey-proxy)
-
-[CodFrm/cxmooc-tools: 一个 超星(学习通)/智慧树(知到)/中国大学mooc 学习工具,火狐,谷歌,油猴支持.全自动任务,视频倍速秒过,作业考试题库,验证码自动打码(੧ᐛ੭挂科模式,启动) (github.com)](https://github.com/CodFrm/cxmooc-tools)
+许可证沿用 GPL-3.0，见 [LICENSE](LICENSE)。
