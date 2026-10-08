@@ -25,6 +25,7 @@ class QAQDtoBase:
 
     def __init__(self) -> None:
         self.current_index = 0
+        self.parse_errors: dict[int, str] = {}
 
     def __iter__(self):
         self.fetch_all()  # 刷新题单缓存
