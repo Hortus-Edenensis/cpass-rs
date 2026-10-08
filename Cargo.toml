@@ -11,7 +11,7 @@ authors = ["Hortus Edenensis"]
 
 [workspace.dependencies]
 aes = "0.8.4"
-async-trait = "0.1.89"
+async-trait = "0.1.92"
 base64 = "0.22.1"
 cbc = "0.1.2"
 chrono = { version = "0.4.42", features = ["serde"] }

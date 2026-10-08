@@ -854,7 +854,7 @@ fn md5_digest(input: &[u8]) -> [u8; 16] {
     let mut c0 = 0x98ba_dcfe_u32;
     let mut d0 = 0x1032_5476_u32;
 
-    for chunk in message.chunks_exact(64) {
+    for chunk in message.as_chunks::<64>().0 {
         let mut words = [0_u32; 16];
         for (index, word) in words.iter_mut().enumerate() {
             let offset = index * 4;
