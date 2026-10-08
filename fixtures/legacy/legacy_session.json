@@ -1,0 +1,7 @@
+{
+  "phone": "13800138000",
+  "puid": 114514,
+  "passwd": "secret-legacy-password",
+  "name": "Legacy User",
+  "ck": "_uid=114514; vc3=legacy-cookie; uf=legacy-token;"
+}

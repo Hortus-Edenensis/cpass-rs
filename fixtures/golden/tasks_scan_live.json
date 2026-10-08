@@ -1,0 +1,45 @@
+{
+  "course": {
+    "course_id": 1001,
+    "class_id": 2002,
+    "cpi": 3003,
+    "key": 4004,
+    "name": "现代汉语",
+    "teacher_name": "王老师",
+    "state": "进行中"
+  },
+  "chapters": [
+    {
+      "chapter_id": 13,
+      "jobs": 1,
+      "index": 3,
+      "name": "直播",
+      "label": "3",
+      "layer": 0,
+      "status": "open",
+      "point_total": 1,
+      "point_finished": 0,
+      "task_points": [
+        {
+          "card_index": 0,
+          "point_index": 0,
+          "module": "insertlive",
+          "title": "直播任务点",
+          "resource_id": "live-course-001",
+          "iframe_data": "{\"liveId\":\"live-course-001\",\"vdoid\":\"vdo-live-001\",\"streamName\":\"zhibo_12345\"}",
+          "attachment_metadata": {
+            "attachment": {
+              "attachment_type": "live",
+              "title": "直播任务点",
+              "stream_name": "zhibo_12345",
+              "vdo_id": "vdo-live-001",
+              "live_id": "live-course-001",
+              "job_id": "job-live-001",
+              "is_job": true
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

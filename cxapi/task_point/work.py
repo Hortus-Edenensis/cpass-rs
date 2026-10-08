@@ -1,3 +1,4 @@
+import logging
 import re
 from pathlib import Path
 from typing import Literal
@@ -8,8 +9,16 @@ from logger import Logger
 
 from ..base import QAQDtoBase, TaskPointBase
 from ..exception import PointWorkError, WorkAccessDenied
-from ..schema import QuestionModel, QuestionsExportSchema, QuestionsExportType, QuestionType
-from ..utils import remove_escape_chars
+from ..schema import (
+    SUPPORTED_QUESTION_TYPES,
+    QuestionModel,
+    QuestionsExportSchema,
+    QuestionsExportType,
+    QuestionType,
+    is_valid_answer,
+    parse_question_type,
+)
+from ..utils import html_text, question_text, question_type_label, saved_answer_value
 
 # 接口-单元作业答题提交
 API_WORK_COMMIT = "https://mooc1-api.chaoxing.com/work/addStudentWorkNew"
@@ -25,52 +34,79 @@ def parse_question(question_node: Tag) -> QuestionModel:
     Returns:
         QuestionModel: 题目数据模型
     """
-    question_id = int(question_node.select_one("input[id^='answertype']")["id"][10:])
-    question_type = QuestionType(int(question_node.select_one("input[id^='answertype']")["value"]))
-
-    # 查找并净化题目字符串
-    # 因为题目所在标签不确定, 可能为 div.Py-m1-title/ 也可能为 div.Py-m1-title/span 也可能为 div.Py-m1-title/p
-    question_value_node = question_node.select_one("div.Py-m1-title")
-    question_value = "".join(list(question_value_node.strings)[2:]).strip()
-
-    # 分类讨论题型解析
+    if question_node is None:
+        raise ValueError("缺少题目节点")
+    type_nodes = question_node.find_all("input", id=re.compile(r"^answertype[0-9]+$"))
+    if len(type_nodes) > 1:
+        raise ValueError("题目 ID 不唯一")
+    id_nodes = question_node.select("input[name='questionId']")
+    if len(id_nodes) > 1:
+        raise ValueError("题目 ID 不唯一")
+    id_node = id_nodes[0] if id_nodes else None
+    raw_id = (
+        id_node.get("value")
+        if id_node
+        else type_nodes[0]["id"][10:]
+        if type_nodes
+        else question_node.get("data")
+    )
+    if not raw_id or not re.fullmatch(r"[0-9]+", raw_id) or int(raw_id) <= 0:
+        raise ValueError("缺少可信题目 ID")
+    question_id = int(raw_id)
+    if type_nodes and int(type_nodes[0]["id"][10:]) != question_id:
+        raise ValueError("题目 ID 与题型字段不一致")
+    type_node = type_nodes[0] if type_nodes else None
+    title_node = question_node.select_one("div.Py-m1-title")
+    raw_type = type_node.get("value") if type_node else None
+    type_title = html_text(question_type_label(title_node) or title_node)
+    question_type = parse_question_type(raw_type, type_title)
+    if question_type not in SUPPORTED_QUESTION_TYPES:
+        logging.getLogger("PointWork").warning(
+            "题型未识别或未支持: id=%s type=%r title=%r", question_id, raw_type, type_title
+        )
+    question_value = question_text(title_node)
+    options = None
+    answer = None
+    saved_answer = saved_answer_value(
+        question_node,
+        f"input.answerInput, input[id='answer{question_id}'], input[id='answers{question_id}'], "
+        f"input[name='answer{question_id}'], input[name='answers{question_id}']",
+    )
     match question_type:
         case QuestionType.单选题 | QuestionType.多选题:
             options = {}
-
-            # 解析答案
-            answer = question_node.select_one("input.answerInput")["value"] or None
-
-            # 解析选项
-            for options_node in question_node.select("li.more-choose-item"):
-                option_key = options_node.select_one("em.choose-opt")["id-param"]
-                option_value = "".join(
-                    node.strip() for node in options_node.select_one("div.choose-desc").cc.strings
+            answer = saved_answer or None
+            for option_node in question_node.select("li.more-choose-item"):
+                key_node = option_node.select_one("em.choose-opt")
+                option_key = key_node.get("id-param") if key_node else None
+                if not option_key or option_key in options:
+                    raise ValueError("选项标号缺失或重复")
+                body = option_node.select_one("div.choose-desc")
+                if body is None:
+                    raise ValueError("缺少选项正文")
+                option_value = html_text(body.select_one("cc") or body)
+                option_value = re.sub(
+                    rf"^\s*{re.escape(option_key)}\s*[.．、:：)）]\s*", "", option_value
                 )
-                option_value = remove_escape_chars(option_value)
+                if not option_value:
+                    raise ValueError("选项正文为空")
                 options[option_key] = option_value
+            if not options:
+                raise ValueError("缺少选项")
         case QuestionType.填空题:
             options = []
             answer = []
-
-            # 解析填空项和答案
             for blank_node in question_node.select("ul.blankList2 > li"):
-                options.append(blank_node.span.text)
-                answer.append(blank_node.select_one("input.blankInp2").get("value"))
+                label = blank_node.select_one("span")
+                field = blank_node.select_one("input.blankInp2")
+                if field is None:
+                    raise ValueError("缺少填空输入框")
+                options.append(html_text(label) if label else "")
+                answer.append(field.get("value", ""))
+            if not options:
+                raise ValueError("缺少填空项")
         case QuestionType.判断题:
-            options = None
-
-            # 解析答案
-            match question_node.select_one("input.answerInput")["value"]:
-                case "true":
-                    answer = True
-                case "false":
-                    answer = False
-                case _:
-                    answer = None
-        case _:
-            raise NotImplementedError
-    question_value = remove_escape_chars(question_value)
+            answer = {"true": True, "false": False}.get(saved_answer.strip().lower())
 
     return QuestionModel(
         id=question_id,
@@ -90,6 +126,7 @@ def construct_questions_form(questions: list[QuestionModel]) -> dict[str, int | 
     不同类型的题目会生成 key-value 不同的表单
     会生成包含多道题目信息的表单
     """
+    questions = [question for question in questions if is_valid_answer(question)]
     form = {"answerwqbid": ",".join(str(q.id) for q in questions)}
     for question in questions:
         form[f"answertype{question.id}"] = question.type.value
@@ -97,7 +134,7 @@ def construct_questions_form(questions: list[QuestionModel]) -> dict[str, int | 
             case QuestionType.单选题 | QuestionType.多选题:
                 form[f"answer{question.id}"] = question.answer
             case QuestionType.填空题:
-                blank_amount = len(question.answer)
+                blank_amount = len(question.options)
                 form[f"tiankongsize{question.id}"] = blank_amount
                 for blank_index in range(blank_amount):
                     form[f"answer{question.id}{blank_index + 1}"] = question.answer[blank_index]
@@ -138,6 +175,7 @@ class PointWorkDto(TaskPointBase, QAQDtoBase):
         self.job_id = job_id
 
         self.questions = []
+        self._question_indices: list[int] = []
 
     def parse_attachment(self) -> bool:
         """解析任务点卡片 Attachment
@@ -174,7 +212,7 @@ class PointWorkDto(TaskPointBase, QAQDtoBase):
         if self.current_index >= len(self.questions):
             raise StopIteration
         question = self.questions[self.current_index]
-        index = self.current_index
+        index = self._question_indices[self.current_index]
         self.current_index += 1
         return index, question
 
@@ -190,7 +228,7 @@ class PointWorkDto(TaskPointBase, QAQDtoBase):
         if not self.questions:
             self.fetch_all()
 
-        return self.questions[index]
+        return self.questions[self._question_indices.index(index)]
 
     def fetch_all(self) -> list[QuestionModel]:
         """拉取全部作业题单
@@ -238,10 +276,11 @@ class PointWorkDto(TaskPointBase, QAQDtoBase):
         submit_form = html.body.select_one("form#form1")
         if submit_form is None:
             raise PointWorkError("作业未创建完成")
-        
+
         self.title = html.body.select_one("h3.py-Title,h3.chapter-title").text.strip()
         self.work_answer_id = int(submit_form.select_one("input#workAnswerId")["value"])
-        self.total_question_num = submit_form.select_one("input#totalQuestionNum")["value"]
+        total_node = submit_form.select_one("input#totalQuestionNum")
+        self.total_question_num = total_node.get("value", "") if total_node else ""
         self.work_relation_id = int(submit_form.select_one("input#workRelationId")["value"])
         self.full_score = submit_form.select_one("input#fullScore")["value"]
         self.enc_work = submit_form.select_one("input#enc_work")["value"]
@@ -249,7 +288,37 @@ class PointWorkDto(TaskPointBase, QAQDtoBase):
 
         # 解析题目数据
         question_nodes = html.body.select("div.Py-mian1")
-        self.questions = [parse_question(question_node) for question_node in question_nodes]
+        self.questions = []
+        self._question_indices = []
+        self.parse_errors.clear()
+        expected = (
+            int(self.total_question_num)
+            if re.fullmatch(r"[0-9]+", str(self.total_question_num))
+            else 0
+        )
+        if expected <= 0:
+            self.parse_errors[0] = f"题目总数无效: {self.total_question_num!r}"
+        elif len(question_nodes) < expected:
+            for index in range(len(question_nodes), expected):
+                self.parse_errors[index] = "缺少题目节点"
+        elif len(question_nodes) > expected:
+            for index in range(expected, len(question_nodes)):
+                self.parse_errors[index] = "题目节点超出声明总数"
+        for index, error in self.parse_errors.items():
+            self.logger.warning(f"题目 {index} 解析失败: {error}")
+        seen_ids = set()
+        for index, question_node in enumerate(question_nodes):
+            try:
+                question = parse_question(question_node)
+                if question.id in seen_ids:
+                    raise ValueError(f"题目 ID 重复: {question.id}")
+            except (ValueError, TypeError, KeyError, AttributeError) as exc:
+                self.parse_errors[index] = str(exc)
+                self.logger.warning(f"题目 {index} 解析失败: {exc}")
+                continue
+            seen_ids.add(question.id)
+            self._question_indices.append(index)
+            self.questions.append(question)
         self.logger.info(f"作业题单解析成功 [{self.title}(J.{self.job_id}/W.{self.work_id})]")
         self.logger.info(f"已缓存共 {len(self.questions)} 道题")
         self.logger.debug(f"题目 list: {[question.to_dict() for question in self.questions]}")
@@ -266,11 +335,17 @@ class PointWorkDto(TaskPointBase, QAQDtoBase):
             index: 题目索引
             question: 题目数据模型
         """
-        self.questions[index] = question
+        if not is_valid_answer(question):
+            raise PointWorkError("答案无效或未完成")
+        cached_index = self._question_indices.index(index)
+        if self.questions[cached_index].id != question.id:
+            raise PointWorkError("题目 ID 与缓存不一致")
+        self.questions[cached_index] = question
         self.logger.info(f"已提交题目 ({index}) 至缓存区 {question}")
 
-        # 仅展示用
         return {
+            "status": True,
+            "scope": "cache",
             "index": index,
             "question": question.value,
             "answer": question.answer,
@@ -281,6 +356,19 @@ class PointWorkDto(TaskPointBase, QAQDtoBase):
         Returns:
             dict: json 响应数据
         """
+        expected = (
+            int(self.total_question_num)
+            if re.fullmatch(r"[0-9]+", str(self.total_question_num))
+            else 0
+        )
+        if (
+            expected <= 0
+            or self.parse_errors
+            or len(self.questions) != expected
+            or len({question.id for question in self.questions}) != expected
+            or not all(is_valid_answer(question) for question in self.questions)
+        ):
+            raise PointWorkError("存在未完成或解析失败题目，不能交卷")
         resp = self.session.post(
             API_WORK_COMMIT,
             params={

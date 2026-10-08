@@ -1,0 +1,32 @@
+{
+  "course": {
+    "class_id": 2002,
+    "course_id": 1001,
+    "cpi": 3003,
+    "key": 4004,
+    "name": "现代汉语",
+    "state": "进行中",
+    "teacher_name": "王老师"
+  },
+  "exam": {
+    "class_id": 2002,
+    "course_id": 1001,
+    "cpi": 3003,
+    "enc_task": "enc-gamma",
+    "exam_id": 555003,
+    "expire_time": null,
+    "meta": {
+      "blocked_message": "考试尚未开始",
+      "captcha_id": null,
+      "entry_state": "blocked",
+      "exam_answer_id": null,
+      "monitor_enc": null,
+      "need_captcha": false,
+      "need_code": false,
+      "need_face": false,
+      "title": null
+    },
+    "name": "第三单元测验",
+    "status": "未开始"
+  }
+}

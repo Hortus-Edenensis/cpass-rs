@@ -1,0 +1,6 @@
+{
+  "status": "accepted",
+  "topic": "cpass/status",
+  "qos": 1,
+  "retain": false
+}

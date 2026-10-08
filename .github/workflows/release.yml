@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  pull_request:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-packages:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            architecture: x64
+            artifact_name: cpass-python-windows-x86_64
+          - os: macos-15
+            architecture: arm64
+            artifact_name: cpass-python-macos-arm64
+          - os: macos-15-intel
+            architecture: x64
+            artifact_name: cpass-python-macos-x86_64
+    runs-on: ${{ matrix.os }}
+    env:
+      RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+      POETRY_VIRTUALENVS_IN_PROJECT: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: ${{ matrix.architecture }}
+
+      - name: Install locked runtime and build tool
+        run: |
+          python -m pip install poetry==1.8.5
+          poetry install --only main --no-root --no-interaction
+          poetry run python -m pip install pyinstaller==6.16.0
+
+      - name: Offline Python regression tests
+        env:
+          CPASS_TEST_FULL_STARTUP: "1"
+        run: poetry run python -m unittest discover -s tests -v
+
+      - name: Package and smoke-test frozen Python runtime
+        shell: bash
+        run: poetry run python scripts/package_python.py "$RELEASE_TAG"
+
+      - name: Upload Python package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+
+  source:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Archive tracked source
+        run: |
+          mkdir dist
+          git archive --format=tar.gz --prefix="cpass-python-$RELEASE_TAG/" HEAD > "dist/cpass-python-source-$RELEASE_TAG.tar.gz"
+          cd dist
+          sha256sum *.tar.gz > source.sha256
+          tar -tzf "cpass-python-source-$RELEASE_TAG.tar.gz" | grep '/main.py$'
+          tar -tzf "cpass-python-source-$RELEASE_TAG.tar.gz" | grep '/poetry.lock$'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cpass-python-source
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    needs: [python-packages, source]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: cpass-python-*
+          merge-multiple: true
+          path: dist
+
+      - name: Verify checksums and publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cd dist
+          cat *.sha256 > SHA256SUMS
+          sha256sum --check SHA256SUMS
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" ./*.tar.gz ./*.zip SHA256SUMS --clobber
+          else
+            gh release create "$RELEASE_TAG" ./*.tar.gz ./*.zip SHA256SUMS --verify-tag --generate-notes --title "$RELEASE_TAG"
+          fi

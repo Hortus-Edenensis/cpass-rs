@@ -1,4 +1,5 @@
 import json
+import logging
 import random
 import re
 from datetime import datetime
@@ -6,7 +7,6 @@ from pathlib import Path
 from typing import Literal
 
 from bs4 import BeautifulSoup, Tag
-from bs4.element import NavigableString
 from rich.columns import Columns
 from rich.console import Console, ConsoleOptions, Group, RenderResult
 from rich.layout import Layout
@@ -38,14 +38,24 @@ from .exception import (
     PCExamClintOnly,
 )
 from .schema import (
+    SUPPORTED_QUESTION_TYPES,
     AccountInfo,
     QuestionModel,
     QuestionsExportSchema,
     QuestionsExportType,
     QuestionType,
+    is_valid_answer,
+    parse_question_type,
 )
 from .session import SessionWraper
-from .utils import get_exam_signature, get_imei, remove_escape_chars
+from .utils import (
+    get_exam_signature,
+    get_imei,
+    html_text,
+    question_text,
+    question_type_label,
+    saved_answer_value,
+)
 
 # SSR页面-考试入口封面
 PAGE_EXAM_COVER = "https://mooc1-api.chaoxing.com/exam-ans/exam/phone/task-exam"
@@ -76,81 +86,73 @@ def parse_question(question_node: Tag) -> QuestionModel:
     Returns:
         QuestionModel: 题目数据模型
     """
-    question_id = int(question_node.select_one("input[name='questionId']")["value"])
-    question_type = QuestionType(int(question_node.select_one("input[name^='type']")["value"]))
+    if question_node is None:
+        raise ValueError("缺少题目节点")
+    id_nodes = question_node.select("input[name='questionId']")
+    if len(id_nodes) > 1:
+        raise ValueError("题目 ID 不唯一")
+    id_node = id_nodes[0] if id_nodes else None
+    raw_id = id_node.get("value") if id_node else question_node.get("data")
+    if not raw_id or not re.fullmatch(r"[0-9]+", raw_id) or int(raw_id) <= 0:
+        raise ValueError("缺少可信题目 ID")
+    question_id = int(raw_id)
+    type_nodes = question_node.select(
+        f"input[name='type{question_id}'], input[id='type{question_id}']"
+    )
+    if len(type_nodes) > 1:
+        raise ValueError("题型字段不唯一")
+    type_node = type_nodes[0] if type_nodes else None
+    title_node = question_node.select_one("div.tit")
+    heading = title_node.select_one("h3") if title_node else None
+    raw_type = type_node.get("value") if type_node else None
+    type_title = html_text(heading or question_type_label(title_node) or title_node)
+    question_type = parse_question_type(raw_type, type_title)
+    if question_type not in SUPPORTED_QUESTION_TYPES:
+        logging.getLogger("Exam").warning(
+            "题型未识别或未支持: id=%s type=%r title=%r", question_id, raw_type, type_title
+        )
+    question_value = question_text(title_node, exam=True)
     options = None
-
-    # 解析题干
-    question_value_node = question_node.select_one("div.tit")
-    question_value = ""
-    if "answerMain" in question_node["class"]:
-        # 单题
-        # eg:
-        # <div class="tit">
-        #   <h3>判断题（共4题，20.0分）</h3>
-        #   1.<span style="color: #999;display: inline-block;">（5.0分）</span>题目正文
-        # </div>
-        for tag in list(question_value_node.children)[4:]:
-            if isinstance(tag, NavigableString):
-                question_value += tag.strip()
-            elif tag.name == "p":
-                question_value += f"\n{tag.text.strip()}"
-    elif "allAnswerList" in question_node["class"]:
-        # 整卷预览
-        # eg:
-        # <div class="tit">
-        #     <h3>判断题（5.0分）</h3>
-        #     2.题目正文
-        # </div>
-        for tag_index, tag in enumerate(list(question_value_node.children)[2:]):
-            if isinstance(tag, NavigableString):
-                tag = tag.strip()
-                if tag_index == 0 and re.match(r"^\d+.", tag):
-                    _, temp = tag.split(".", 1)
-                    if temp:
-                        question_value = temp
-                        break
-                else:
-                    question_value += tag
-            elif tag.name == "p":
-                question_value += "\n" + tag.text.strip()
-    else:
-        raise ExamError("题目解析异常")
-    question_value = remove_escape_chars(question_value)
-
-    # 分类讨论题型解析
+    answer = None
+    saved_answer = saved_answer_value(
+        question_node,
+        f"input[id='answer{question_id}'], input[id='answers{question_id}'], "
+        f"input[name='answer{question_id}'], input[name='answers{question_id}']",
+    )
     match question_type:
         case QuestionType.单选题 | QuestionType.多选题:
             options = {}
-
-            # 解析答案
-            answer = question_node.select_one("input[id^='answer']")["value"] or None
-
-            # 解析选项
+            answer = saved_answer or None
             for option_node in question_node.select("div.answerList.radioList"):
-                option_key = option_node["name"]
-                option_value = "".join(s.strip() for s in option_node.select_one("cc").strings)
-                option_value = remove_escape_chars(option_value)
+                option_key = option_node.get("name")
+                if not option_key or option_key in options:
+                    raise ValueError("选项标号缺失或重复")
+                body = option_node.select_one("cc")
+                if body is None:
+                    body = option_node.select_one(".choose-desc, .option-content") or option_node
+                option_value = html_text(body)
+                option_value = re.sub(
+                    rf"^\s*{re.escape(option_key)}\s*[.．、:：)）]\s*", "", option_value
+                )
+                if not option_value:
+                    raise ValueError("选项正文为空")
                 options[option_key] = option_value
+            if not options:
+                raise ValueError("缺少选项")
         case QuestionType.填空题:
             answer = []
             options = []
-
-            # 解析填空项和答案
             for blank_node in question_node.select("div.completionList.objectAuswerList"):
-                options.append(blank_node.select_one("span.grayTit").text)
-                answer.append(blank_node.select_one("textarea.blanktextarea").text)
+                label = blank_node.select_one("span.grayTit")
+                field = blank_node.select_one("textarea.blanktextarea")
+                if field is None:
+                    raise ValueError("缺少填空输入框")
+                options.append(html_text(label) if label else "")
+                answer.append(field.get_text())
+            if not options:
+                raise ValueError("缺少填空项")
         case QuestionType.判断题:
-            # 解析答案
-            match question_node.select_one("input[id^='answer']")["value"]:
-                case "true":
-                    answer = True
-                case "false":
-                    answer = False
-                case _:
-                    answer = None
-        case _:
-            raise NotImplementedError
+            answer = {"true": True, "false": False}.get(saved_answer.strip().lower())
 
     return QuestionModel(
         id=question_id,
@@ -175,6 +177,8 @@ def construct_question_form(question: QuestionModel) -> dict[str, int | str]:
         f"typeName{question.id}": question.type.name,
         "hidetext": "",
     }
+    if not is_valid_answer(question):
+        return form
     match question.type:
         case QuestionType.单选题:
             form[f"answer{question.id}"] = question.answer
@@ -240,8 +244,8 @@ class ExamDto(QAQDtoBase):
     need_code: bool  # 是否要求考试码
     need_face: bool  # 是否要求人脸识别
     need_captcha: bool  # 是否要求人机验证码
-    captcha_id: str # 人机验证码id
-    captcha_validate: str   # 人机验证码结果
+    captcha_id: str  # 人机验证码id
+    captcha_validate: str  # 人机验证码结果
     enc: str  # 动态行为校验
     remain_time: int
     enc_remain_time: int
@@ -329,14 +333,15 @@ class ExamDto(QAQDtoBase):
             int: 题目索引
             QuestionModel: 题目模型
         """
-        try:
-            question = self.fetch(self.current_index)
-        except ExamInvalidParams:
-            raise StopIteration
-        else:
+        while True:
             index = self.current_index
+            try:
+                question = self.fetch(index)
+            except ExamInvalidParams:
+                raise StopIteration
             self.current_index += 1
-            return index, question
+            if question is not None:
+                return index, question
 
     @property
     def remain_time_str(self) -> str:
@@ -476,7 +481,7 @@ class ExamDto(QAQDtoBase):
         else:
             raise HandleCaptchaError("人机验证码处理失败")
 
-    def start(self, code: str = None) -> QuestionModel:
+    def start(self, code: str = None) -> QuestionModel | None:
         """开始考试
         Args:
             code: 考试码
@@ -572,7 +577,7 @@ class ExamDto(QAQDtoBase):
         self.logger.debug(f"答题卡状态: {sheet}")
         return sheet
 
-    def fetch(self, index: int) -> QuestionModel:
+    def fetch(self, index: int) -> QuestionModel | None:
         """拉取一道题
         Args:
             index: 题目索引 从 0 开始计数
@@ -633,7 +638,13 @@ class ExamDto(QAQDtoBase):
 
         # 解析题目
         question_node = submit_form.select_one("div.questionWrap.singleQuesId.ans-cc-exam")
-        question = parse_question(question_node)
+        try:
+            question = parse_question(question_node)
+        except (ValueError, TypeError, KeyError, AttributeError) as exc:
+            self.parse_errors[index] = str(exc)
+            self.logger.warning(f"题目 {index} 解析失败: {exc}")
+            return None
+        self.parse_errors.pop(index, None)
         self.logger.info(f"拉取题目 {index} 成功 [{self.title}(I.{self.exam_id})]")
         self.logger.debug(f"题目 Content: {question.to_dict()}")
         self.refresh_tui()
@@ -688,10 +699,21 @@ class ExamDto(QAQDtoBase):
 
         # 解析题目列表
         question_nodes = html.body.select("div.questionWrap.singleQuesId.ans-cc-exam")
-        questions = [parse_question(question_node) for question_node in question_nodes]
-        self.logger.info(
-            f"整卷预览拉取成功 (共 {len(questions)} 题) [{self.title}(I.{self.exam_id})]"
-        )
+        questions = []
+        self.parse_errors.clear()
+        seen_ids = set()
+        for index, question_node in enumerate(question_nodes):
+            try:
+                question = parse_question(question_node)
+                if question.id in seen_ids:
+                    raise ValueError(f"题目 ID 重复: {question.id}")
+            except (ValueError, TypeError, KeyError, AttributeError) as exc:
+                self.parse_errors[index] = str(exc)
+                self.logger.warning(f"题目 {index} 解析失败: {exc}")
+                continue
+            seen_ids.add(question.id)
+            questions.append(question)
+        self.logger.info(f"整卷预览拉取成功 (共 {len(questions)} 题) [{self.title}(I.{self.exam_id})]")
         self.logger.debug(f"题目 list: {[question.to_dict() for question in questions]}")
         self.refresh_tui()
         return questions
@@ -716,6 +738,12 @@ class ExamDto(QAQDtoBase):
         Returns:
             dict: json 响应数据
         """
+        if question is not None and not is_valid_answer(question):
+            raise ExamSubmitError("答案无效或未完成")
+        if not final and question is None:
+            raise ExamSubmitError("缺少待提交题目")
+        if final and self.parse_errors:
+            raise ExamSubmitError("存在解析失败题目，不能交卷")
         self.logger.info(f"开始提交题目 ({index}) {question}")
         resp = self.session.post(
             API_SUBMIT_ANSWER,
@@ -785,7 +813,7 @@ class ExamDto(QAQDtoBase):
                 )
             if json_content.get("msg") == "考试时间已用完,不允许提交答案!":
                 raise ExamTimeout
-            elif json_content.get("msg").endswith("分钟内不允许提交考试"):
+            elif str(json_content.get("msg", "")).endswith("分钟内不允许提交考试"):
                 raise ExamSubmitTooEarly
             else:
                 raise ExamSubmitError(json_content.get("msg"))
@@ -799,9 +827,7 @@ class ExamDto(QAQDtoBase):
             self.refresh_tui()
 
         if final is True:
-            self.logger.info(
-                f"交卷成功 ({json_content.get('msg')}) [{self.title}(I.{self.exam_id})]"
-            )
+            self.logger.info(f"交卷成功 ({json_content.get('msg')}) [{self.title}(I.{self.exam_id})]")
         else:
             self.logger.info(
                 f"提交成功 {index} ({json_content.get('msg')}) [{self.title}(I.{self.exam_id})]"

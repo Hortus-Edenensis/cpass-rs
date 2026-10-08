@@ -1,0 +1,14 @@
+{
+  "data": [
+    {
+      "card": {
+        "data": [
+          {
+            "title": "词汇文档",
+            "description": "<iframe module=\"insertdoc\" data='{\"objectid\":\"doc-001\"}'></iframe>"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "data": [
+    {
+      "card": {
+        "data": [
+          {
+            "title": "绪论视频",
+            "description": "<iframe module=\"insertvideo\" data='{\"objectid\":\"video-001\"}'></iframe>"
+          },
+          {
+            "title": "绪论测验",
+            "description": "<iframe module=\"work\" data='{\"workid\":\"work-001\",\"_jobid\":\"job-001\"}'></iframe>"
+          }
+        ]
+      }
+    }
+  ]
+}

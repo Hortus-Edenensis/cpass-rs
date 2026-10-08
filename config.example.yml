@@ -1,0 +1,108 @@
+# cpass-rs default Rust CLI config
+# The Rust CLI still accepts the legacy top-level path fields to keep migration friction low.
+
+session_path: "session/"
+log_path: "logs/"
+export_path: "export/"
+face_image_path: "faces/"
+
+transport:
+  timeout_secs: 20
+  retries: 3
+  retry_delay_millis: 1000
+
+login:
+  # Prefer CPASS_PHONE / CPASS_PASSWORD in real environments. `phone` is also the default
+  # saved-session selector for non-interactive commands when `--phone` is omitted.
+  phone: null
+  password: null
+
+searchers:
+  # - type: json
+  #   file_path: "questions.json"
+  #   # JSON object: question prompt or rendered search text -> answer string or string list
+  # - type: sqlite
+  #   file_path: "questions.db"
+  #   # Each row stores one answer candidate; relative file_path resolves from this config file.
+  #   table: "question"
+  #   req_field: "question"
+  #   rsp_field: "answer"
+  # `cpass run` now supports HTTP answer APIs directly.
+  # `type: http` is the generic Rust shape; legacy `restApiSearcher` / `JsonApiSearcher`
+  # configs remain accepted for migration compatibility.
+  # - type: http
+  #   url: "http://127.0.0.1:8088/question/search"
+  #   payload_mode: "form" # or "json"; legacy restApiSearcher / JsonApiSearcher map here
+  #   method: "POST"
+  #   q_field: "question"
+  #   o_field: "options"
+  #   headers:
+  #     Authorization: "Bearer example-token"
+  #   ext_params:
+  #     tenant: "demo"
+  #   a_field: "$.data"
+  #   fixture_response_path: null # optional offline replay JSON, resolved from this config dir
+  # - type: openai-compatible
+  #   base_url: "https://api.openai.com/v1"
+  #   model: "gpt-4.1-mini"
+  #   # Legacy `OpenAISearcher` also maps onto the same chat-completions contract.
+  #   # Prefer CPASS_OPENAI_API_KEY in real environments.
+  #   api_key: "sk-example"
+  #   system_prompt: "你是一位答题助手。请只输出答案本身，不要解释。"
+  #   prompt_template: "{search_text}"
+  #   fixture_response_path: null # optional offline replay JSON, resolved from this config dir
+  # - type: openai-compatible
+  #   base_url: "https://api.deepseek.com"
+  #   model: "deepseek-flash" # Official API id for DeepSeek-V4.1-Flash; gateway ids stay unchanged.
+  #   # Set CPASS_OPENAI_API_KEY instead of storing the API key here.
+  #   thinking:
+  #     type: enabled # enabled / disabled; pair disabled with reasoning_effort: none
+  #   reasoning_effort: high # Official efforts: none / low / high / max
+  #   max_tokens: 32768
+  #   response_format:
+  #     type: json_object # Adds a JSON answer instruction and examples to the system prompt.
+  #   prompt_template: "{search_text}"
+
+notifications:
+  # Gotify delivery stays on the CLI side of the boundary. MQTT supports both deterministic
+  # fixture replay and one-shot live broker delivery from the same validated config shape.
+  # - type: gotify
+  #   base_url: "https://gotify.example/message"
+  #   token: "gotify-app-token"
+  #   priority: 5
+  #   fixture_response_path: null # optional offline replay JSON, resolved from this config dir
+  # - type: mqtt
+  #   broker_url: "mqtt://broker.example:1883"
+  #   topic: "cpass/status"
+  #   client_id: "cpass-rs"
+  #   qos: 1
+  #   retain: false
+  #   username: "demo-user"
+  #   password: "demo-password"
+  #   fixture_response_path: null # optional offline fixture ack JSON; omit it for one-shot live broker delivery
+
+profiles:
+  # Named profiles let automation switch between non-interactive defaults without duplicating the
+  # whole config file. Scalar fields override the root config when present; `searchers` and
+  # `notifications` replace the root lists only when the profile sets them.
+  # automation:
+  #   session_path: "session/automation"
+  #   export_path: "export/automation"
+  #   login:
+  #     # Pin the saved-session selector for non-interactive export/run commands.
+  #     phone: "13800138000"
+  #     # Keep passwords in CPASS_PASSWORD (or pass --password to `cpass login`) instead of
+  #     # committing them here.
+  #     password: null
+  #   transport:
+  #     retries: 5
+  #   searchers:
+  #     - type: json
+  #       file_path: "questions.json"
+  #   notifications:
+  #     - type: gotify
+  #       base_url: "https://gotify.example/message"
+  #       token: "gotify-app-token"
+  # Select a profile with `--profile automation` or `CPASS_PROFILE=automation`.
+  # Headless automation should prefer `cpass run --json`; `cpass run --tui` remains an interactive
+  # subscriber UI. See docs/automation-profiles.md for recipe-level guidance and boundaries.

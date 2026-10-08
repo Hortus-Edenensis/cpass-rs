@@ -1,0 +1,96 @@
+{
+  "course": {
+    "course_id": 1001,
+    "class_id": 2002,
+    "cpi": 3003,
+    "key": 4004,
+    "name": "现代汉语",
+    "teacher_name": "王老师",
+    "state": "进行中"
+  },
+  "chapters": [
+    {
+      "chapter_id": 11,
+      "jobs": 2,
+      "index": 1,
+      "name": "绪论",
+      "label": "1",
+      "layer": 0,
+      "status": "open",
+      "point_total": 3,
+      "point_finished": 1,
+      "task_points": [
+        {
+          "card_index": 0,
+          "point_index": 0,
+          "module": "insertvideo",
+          "title": "绪论视频",
+          "resource_id": "video-001",
+          "iframe_data": "{\"objectid\":\"video-001\"}",
+          "attachment_metadata": {
+            "fid": 9876,
+            "attachment": {
+              "attachment_type": "video",
+              "object_id": "video-001",
+              "title": "绪论视频",
+              "job_id": "job-video-001",
+              "other_info": "nodeId_11",
+              "playback_rate": "0.9",
+              "is_job": true
+            },
+            "video_status": {
+              "status": "success",
+              "filename": "绪论视频.mp4",
+              "duration_secs": 602,
+              "dtoken": "video-dtoken-001"
+            }
+          }
+        },
+        {
+          "card_index": 1,
+          "point_index": 0,
+          "module": "work",
+          "title": "绪论测验",
+          "resource_id": "work-001",
+          "iframe_data": "{\"workid\":\"work-001\",\"_jobid\":\"job-001\"}",
+          "chapter_work_metadata": {
+            "work_id": "work-001",
+            "job_id": "job-001"
+          }
+        }
+      ]
+    },
+    {
+      "chapter_id": 12,
+      "jobs": 1,
+      "index": 2,
+      "name": "词汇",
+      "label": "2",
+      "layer": 0,
+      "status": "open",
+      "point_total": 1,
+      "point_finished": 1,
+      "task_points": [
+        {
+          "card_index": 0,
+          "point_index": 0,
+          "module": "insertdoc",
+          "title": "词汇文档",
+          "resource_id": "doc-001",
+          "iframe_data": "{\"objectid\":\"doc-001\"}",
+          "attachment_metadata": {
+            "attachment": {
+              "attachment_type": "document",
+              "object_id": "doc-001",
+              "title": "现代汉语词汇材料",
+              "file_type": "pdf",
+              "job_id": "job-doc-001",
+              "jtoken": "jtoken-doc-001",
+              "is_job": true
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

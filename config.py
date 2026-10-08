@@ -1,3 +1,4 @@
+import os
 import warnings
 from pathlib import Path
 
@@ -5,7 +6,7 @@ import yaml
 
 try:
     with open("config.yml", "r", encoding="utf8") as fp:
-        conf: dict = yaml.load(fp, yaml.FullLoader)
+        conf: dict = yaml.load(fp, yaml.FullLoader) or {}
 except FileNotFoundError:
     conf = {}
     warnings.warn("Config file not found", RuntimeWarning)
@@ -13,8 +14,8 @@ except FileNotFoundError:
 # 路径配置
 SESSIONS_PATH = Path(conf.get("session_path", "session"))
 LOGS_PATH = Path(conf.get("log_path", "logs"))
-EXPORT_PATH = Path(conf.get("export_path"))
-FACE_PATH = Path(conf.get("face_image_path"))
+EXPORT_PATH = Path(conf.get("export_path") or "export")
+FACE_PATH = Path(conf.get("face_image_path") or "faces")
 
 # 创建导出目录
 if not EXPORT_PATH.exists():
@@ -43,4 +44,9 @@ VIDEO_WAIT: int = VIDEO.get("wait", 15)
 DOCUMENT_WAIT: int = DOCUMENT.get("wait", 15)
 
 # 搜索器配置
-SEARCHERS: list = conf.get("searchers", [])
+SEARCHERS: list = conf.get("searchers") or []
+if api_key := os.environ.get("CPASS_OPENAI_API_KEY"):
+    SEARCHERS = [
+        {**searcher, "api_key": api_key} if searcher.get("type") == "OpenAISearcher" else searcher
+        for searcher in SEARCHERS
+    ]

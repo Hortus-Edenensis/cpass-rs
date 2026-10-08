@@ -1,0 +1,18 @@
+{
+  "data": [
+    {
+      "card": {
+        "data": [
+          {
+            "title": "词汇文档",
+            "description": "<iframe module=\"insertdoc\" data='{\"objectid\":\"doc-001\"}'></iframe>"
+          },
+          {
+            "title": "词汇测验",
+            "description": "<iframe module=\"work\" data='{\"workid\":\"work-002\",\"_jobid\":\"job-002\"}'></iframe>"
+          }
+        ]
+      }
+    }
+  ]
+}

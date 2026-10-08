@@ -1,0 +1,349 @@
+{
+  "course": {
+    "course_id": 1001,
+    "class_id": 2002,
+    "cpi": 3003,
+    "key": 4004,
+    "name": "现代汉语",
+    "teacher_name": "王老师",
+    "state": "进行中"
+  },
+  "chapters": [
+    {
+      "chapter_id": 11,
+      "jobs": 1,
+      "chapter_index": 1,
+      "chapter_name": "绪论",
+      "chapter_label": "1",
+      "layer": 0,
+      "status": "open",
+      "point_total": 1,
+      "point_finished": 0,
+      "task_points": [
+        {
+          "card_index": 0,
+          "point_index": 0,
+          "module": "insertvideo",
+          "task_kind": {
+            "kind": "video"
+          },
+          "title": "绪论视频",
+          "resource_id": "video-001",
+          "iframe_data": "{\"objectid\":\"video-001\"}",
+          "attachment_metadata": {
+            "fid": 9876,
+            "attachment": {
+              "attachment_type": "video",
+              "object_id": "video-001",
+              "title": "绪论视频",
+              "job_id": "job-video-001",
+              "other_info": "nodeId_11",
+              "playback_rate": "0.9",
+              "is_job": true
+            },
+            "video_status": {
+              "status": "success",
+              "filename": "绪论视频.mp4",
+              "duration_secs": 602,
+              "dtoken": "video-dtoken-001"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "chapter_id": 12,
+      "jobs": 2,
+      "chapter_index": 2,
+      "chapter_name": "词汇",
+      "chapter_label": "2",
+      "layer": 0,
+      "status": "open",
+      "point_total": 2,
+      "point_finished": 1,
+      "task_points": [
+        {
+          "card_index": 0,
+          "point_index": 0,
+          "module": "insertdoc",
+          "task_kind": {
+            "kind": "document"
+          },
+          "title": "词汇文档",
+          "resource_id": "doc-001",
+          "iframe_data": "{\"objectid\":\"doc-001\"}",
+          "attachment_metadata": {
+            "attachment": {
+              "attachment_type": "document",
+              "object_id": "doc-001",
+              "title": "现代汉语词汇材料",
+              "file_type": "pdf",
+              "job_id": "job-doc-001",
+              "jtoken": "jtoken-doc-001",
+              "is_job": true
+            }
+          }
+        },
+        {
+          "card_index": 1,
+          "point_index": 0,
+          "module": "work",
+          "task_kind": {
+            "kind": "chapter_work"
+          },
+          "title": "词汇测验",
+          "resource_id": "work-002",
+          "iframe_data": "{\"workid\":\"work-002\",\"_jobid\":\"job-002\"}",
+          "chapter_work_metadata": {
+            "work_id": "work-002",
+            "job_id": "job-002"
+          }
+        }
+      ]
+    }
+  ],
+  "execution_queue": [
+    {
+      "queue_index": 0,
+      "chapter_id": 11,
+      "chapter_index": 1,
+      "chapter_name": "绪论",
+      "chapter_label": "1",
+      "card_index": 0,
+      "point_index": 0,
+      "module": "insertvideo",
+      "task_kind": {
+        "kind": "video"
+      },
+      "title": "绪论视频",
+      "resource_id": "video-001",
+      "iframe_data": "{\"objectid\":\"video-001\"}",
+      "attachment_metadata": {
+        "fid": 9876,
+        "attachment": {
+          "attachment_type": "video",
+          "object_id": "video-001",
+          "title": "绪论视频",
+          "job_id": "job-video-001",
+          "other_info": "nodeId_11",
+          "playback_rate": "0.9",
+          "is_job": true
+        },
+        "video_status": {
+          "status": "success",
+          "filename": "绪论视频.mp4",
+          "duration_secs": 602,
+          "dtoken": "video-dtoken-001"
+        }
+      }
+    },
+    {
+      "queue_index": 1,
+      "chapter_id": 12,
+      "chapter_index": 2,
+      "chapter_name": "词汇",
+      "chapter_label": "2",
+      "card_index": 0,
+      "point_index": 0,
+      "module": "insertdoc",
+      "task_kind": {
+        "kind": "document"
+      },
+      "title": "词汇文档",
+      "resource_id": "doc-001",
+      "iframe_data": "{\"objectid\":\"doc-001\"}",
+      "attachment_metadata": {
+        "attachment": {
+          "attachment_type": "document",
+          "object_id": "doc-001",
+          "title": "现代汉语词汇材料",
+          "file_type": "pdf",
+          "job_id": "job-doc-001",
+          "jtoken": "jtoken-doc-001",
+          "is_job": true
+        }
+      }
+    },
+    {
+      "queue_index": 2,
+      "chapter_id": 12,
+      "chapter_index": 2,
+      "chapter_name": "词汇",
+      "chapter_label": "2",
+      "card_index": 1,
+      "point_index": 0,
+      "module": "work",
+      "task_kind": {
+        "kind": "chapter_work"
+      },
+      "title": "词汇测验",
+      "resource_id": "work-002",
+      "iframe_data": "{\"workid\":\"work-002\",\"_jobid\":\"job-002\"}",
+      "chapter_work_metadata": {
+        "work_id": "work-002",
+        "job_id": "job-002"
+      }
+    }
+  ],
+  "total_task_points": 3,
+  "execution_preflight": {
+    "all_entries_registered": true,
+    "total_entries": 3,
+    "registered_entries": 3,
+    "blocked_entries": 0,
+    "queue": [
+      {
+        "queue_index": 0,
+        "resolution": {
+          "status": "registered",
+          "registration": {
+            "key": "video",
+            "module": "insertvideo"
+          }
+        }
+      },
+      {
+        "queue_index": 1,
+        "resolution": {
+          "status": "registered",
+          "registration": {
+            "key": "document",
+            "module": "insertdoc"
+          }
+        }
+      },
+      {
+        "queue_index": 2,
+        "resolution": {
+          "status": "registered",
+          "registration": {
+            "key": "chapter_work",
+            "module": "work"
+          }
+        }
+      }
+    ]
+  },
+  "execution_result": {
+    "course_id": 1001,
+    "state": "blocked",
+    "total_entries": 3,
+    "completed_entries": 2,
+    "blocked_entries": 1,
+    "queue": [
+      {
+        "queue_index": 0,
+        "state": "completed",
+        "resolution": {
+          "status": "registered",
+          "registration": {
+            "key": "video",
+            "module": "insertvideo"
+          }
+        }
+      },
+      {
+        "queue_index": 1,
+        "state": "completed",
+        "resolution": {
+          "status": "registered",
+          "registration": {
+            "key": "document",
+            "module": "insertdoc"
+          }
+        }
+      },
+      {
+        "queue_index": 2,
+        "state": "blocked",
+        "resolution": {
+          "status": "registered",
+          "registration": {
+            "key": "chapter_work",
+            "module": "work"
+          }
+        }
+      }
+    ]
+  },
+  "events": [
+    {
+      "event": "course_run_planning_started",
+      "course_id": 1001,
+      "course_index": null
+    },
+    {
+      "event": "course_run_planning_finished",
+      "course_id": 1001,
+      "chapters": 2,
+      "task_points": 3
+    },
+    {
+      "event": "course_run_execution_started",
+      "course_id": 1001,
+      "total_entries": 3
+    },
+    {
+      "event": "course_run_queue_entry_state_changed",
+      "course_id": 1001,
+      "queue_index": 0,
+      "state": "running"
+    },
+    {
+      "event": "course_run_video_progress_reported",
+      "course_id": 1001,
+      "queue_index": 0,
+      "playing_time_secs": 602,
+      "duration_secs": 602,
+      "is_passed": true
+    },
+    {
+      "event": "course_run_queue_entry_state_changed",
+      "course_id": 1001,
+      "queue_index": 0,
+      "state": "completed"
+    },
+    {
+      "event": "course_run_queue_entry_state_changed",
+      "course_id": 1001,
+      "queue_index": 1,
+      "state": "running"
+    },
+    {
+      "event": "course_run_document_progress_reported",
+      "course_id": 1001,
+      "queue_index": 1,
+      "success": true
+    },
+    {
+      "event": "course_run_queue_entry_state_changed",
+      "course_id": 1001,
+      "queue_index": 1,
+      "state": "completed"
+    },
+    {
+      "event": "course_run_queue_entry_state_changed",
+      "course_id": 1001,
+      "queue_index": 2,
+      "state": "running"
+    },
+    {
+      "event": "warning",
+      "message": "queue entry 2 chapter-work runtime snapshot fetch failed: unexpected response: fixture transport has no chapter-card attachment fixture for request [(\"clazzid\", \"2002\"), (\"courseid\", \"1001\"), (\"knowledgeid\", \"12\"), (\"num\", \"1\"), (\"isPhone\", \"1\"), (\"control\", \"true\"), (\"cpi\", \"3003\")]; stopping fail-closed before any answer save or submit endpoint is called"
+    },
+    {
+      "event": "course_run_queue_entry_state_changed",
+      "course_id": 1001,
+      "queue_index": 2,
+      "state": "blocked"
+    },
+    {
+      "event": "course_run_execution_finished",
+      "course_id": 1001,
+      "state": "blocked",
+      "total_entries": 3,
+      "completed_entries": 2,
+      "blocked_entries": 1
+    }
+  ]
+}

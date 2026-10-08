@@ -1,332 +1,377 @@
-<div align="center">
-    <h1>超星学习通答题姬</h1>
-    <h2>CxKitty</h2>
-    <img alt="Github Stars" src="https://img.shields.io/github/stars/SocialSisterYi/CxKitty">
-    <img alt="Github Forks" src="https://img.shields.io/github/forks/SocialSisterYi/CxKitty">
-    <img alt="Github License" src="https://img.shields.io/github/license/SocialSisterYi/CxKitty">
-    <img alt="Code style: black" src="https://img.shields.io/badge/code%20style-black-000000.svg">
-    <img alt="Image Size" src="https://img.shields.io/docker/image-size/socialsisteryi/cx-kitty">
-</div>
+# cpass-rs
 
-本项目旨在研究学习爬虫技术和网络接口编程技术，同时致力于以开源方式抵制并消灭各种付费“刷课平台”和“黑产”
+`cpass-rs` maintains the Python CxKitty client and a native Rust workspace.
 
-<span style="color: red"><b>Ps: 本项目不提供任何题库资源，有相关测试需求者请按照文档自行解决。本项目仅供学习参考使用，请在下载部署后 24 小时内删除，由于使用本项目不当所造成的挂科或不良学习记录作者一概不负责。</b></span>
+The date-based Python release includes strict question parsing, conservative answer matching,
+and DeepSeek V4.1 Flash thinking support. Download the Python source, Windows executable,
+or native macOS application from [GitHub Releases](https://github.com/Hortus-Edenensis/cpass-rs/releases).
 
-# notice
+## Python runtime
 
-重要通知：项目**归档**，新项目将在**不久后回归**
-
-## ✨Features
-
-### Supports
-
-- 会话管理
-  - ✅支持手机号+密码登录、二维码登录，可以自动 / 手动重登账号
-  - ✅内置多账号管理器，自动存取账号信息，自动判断会话 ck 有效性，以 json 格式存档在本地
-- 交互
-  - ✅以 Terminal-UI 方式进行人机交互，展示工作流程、章节任务点状态，输出详细信息到 log 文件，作为一个理工男，不觉得很酷吗？
-  - ✅批量选择课程（使用序号 / courseId / 课程名）
-- 协议实现
-  - ✅使用 [requests](https://github.com/psf/requests) 及 [bs4](https://www.crummy.com/software/BeautifulSoup/) 分别进行协议模拟和 HTML 解析，故无需浏览器，更无需油猴脚本
-  - ✅无惧接口风控，基于 [OpenCV](https://github.com/opencv/opencv) 与 [ddddocr](https://github.com/sml2h3/ddddocr) 对验证码进行识别，进而解除接口风控状态
-  - ✅接口请求 retry 支持，针对网络环境不佳以及使用移动流量的场景优化
-  - ✅人脸识别弹窗自动上传提交，支持课程进入、任务点进入、考试进入三种类型，可使用预先上传的人脸图片，也可自定义图片上传提交
-- 任务点
-  - ✅视频课程任务点模拟播放（无需消耗流量播放流媒体内容）
-  - ✅文档任务点模拟浏览（如 word ppt pdf 等）
-- 考试及测验
-  - ✅章节测验任务点自动答题，支持单选题、多选题、填空题、判断题，试题未完成可临时保存
-  - ✅课程考试（考试模式）自动答题，支持单选题、多选题、填空题、判断题（使用手机客户端接口）
-  - ✅可以跳过考试承诺书（不支持自动提交）、可以跳过重考须知
-  - ✅自动过滤题干和选项中的空白 Unicode 字符，eg：u+2002、u+200b、u+3000
-  - ✅遇到匹配失败的题，可使用 fuzzer 方式填充答案并提交（默认关闭）
-  - ✅章节测验试题 / 课程考试可完整导出，信息全、无加密无乱码，可导出临时保存的答案，现支持 json 格式
-  - ✅自动答题功能需要至少一种的 **题库后端** 支持，现支持`REST API`、`JSON`、`SQLite`三种类型的 **题库后端**，同时已适配`Enncy`、`网课小工具（Go题）`、`题库海`、`冷月题库`、`Muke题库`、`柠檬题库`六种第三方题库，同时支持 `ChatGPT 在线答题`，可并行搜索，择优匹配答案（建议使用自建题库）
-  - ✅`REST API`类型 **题库后端** （用户接口）支持使用 [JsonPath](https://goessner.net/articles/JsonPath/) 语法进行答案字段提取，允许用户注入 HTTP header 和 params 依赖字段
-  - ✅日志中将记录未完成的题目，并自动导出未完成的题目到 json
-
-### TODO
-
-以下特性有可能逐渐被添加
-
-- ⭕短信验证码登录、学号登录
-- ⭕直播任务点、文章阅读任务点
-- ⭕简答题、论述题等题型支持
-- ⭕富文本答题，匹配选项为图片的情况
-- ⭕使用 Gotify 或 MQTT 上报任务进度以及完成情况
-- ⭕使用 args 直接传参登录账号以及选课
-- ⭕导出已批阅的章节测验
-- ⭕试题自动等待交卷
-
-## ❤️Contributing Guide
-
-若发现程序存在任何 bug 或有好的想法，欢迎提交 Issue，提交 bug 反馈时需要带上报错信息截图（截全）以及对应 log 文件，并说明触发条件
-
-如果有能力一同开发项目，欢迎使用 [PR](https://github.com/SocialSisterYi/CxKitty/pulls) 提交代码（注意合并 Origin 和修改内容
-
-提交 Issue 时应当遵守 **[提问的智慧](https://github.com/ryanhanwu/How-To-Ask-Questions-The-Smart-Way/blob/main/README-zh_CN.md)** 以及[别像弱智一样提问](https://github.com/tangx/Stop-Ask-Questions-The-Stupid-Ways)，切勿以`不懂`、`萌新问个问题`、`小白啥也不会浇浇`、`整个xxx呗`作为标题，否则一律忽略
-
-[Issue](https://github.com/SocialSisterYi/CxKitty/issues) 为本项目的唯一反馈渠道，任何包括不限于在 QQ、B站私信、Telegram、微信 的提问一律忽略
-
-## 🧩Typographical
-
-![](imgs/typo.png)
-
-## 🚀Build
-
-### 💻本地化构建项目
-
-使用 Python 版本 >= 3.10.0
-
-clone 项目到本地，并使用 poetry 安装依赖和管理 venv
+Use Python 3.10 or 3.11 and Poetry 1.8:
 
 ```bash
-git clone 'https://github.com/SocialSisterYi/CxKitty'
-cd CxKitty
-poetry install
+python -m pip install poetry==1.8.5
+poetry install --no-root
+poetry run python main.py --self-check
+poetry run python main.py
 ```
 
-运行主程序
+Edit `config.yml` before using the client. `--self-check` checks the installed parser, searcher,
+and OCR dependencies offline and exits before login. Windows packages include `CxKitty.exe`;
+macOS packages include `CxKitty.app`, which opens the interactive client in Terminal and stores
+configuration/session data in `~/Library/Application Support/CxKitty`.
+
+The four supported automatic question kinds require complete, unique answers. Existing valid
+answers, including boolean `False`, are preserved. Missing/duplicate question IDs, parse errors,
+partial answers, conflicts, or invalid save receipts block final submission.
+
+### DeepSeek V4.1 Flash
+
+Set `CPASS_OPENAI_API_KEY` in your environment and add this entry to `searchers` in `config.yml`:
+
+```yaml
+searchers:
+  - type: OpenAISearcher
+    base_url: "https://api.deepseek.com/v1"
+    model: "deepseek-v4.1-flash"
+    thinking: {type: enabled}
+    reasoning_effort: high
+    max_tokens: 8192
+    response_format: {type: json_object}
+    system_prompt: "只返回最终答案的 JSON 对象，不要解释。"
+    prompt: "题型：{type}\n题目：{value}\n{options}"
+```
+
+The official endpoint maps `deepseek-v4.1-flash` to the current official API ID `deepseek-flash`;
+gateway model names pass through unchanged. Only final `message.content` is matched;
+`reasoning_content` is never used as an answer and truncated responses remain unresolved.
+See [Python searcher configuration](./docs/python-searchers.md) and the
+[official model update](https://api-docs.deepseek.com/updates/).
+
+## Rust workspace status
+
+- Native runtime: Rust CLI in [`crates/cpass-cli`](./crates/cpass-cli)
+- Python runtime: implementation in [`cxapi/`](./cxapi), [`resolver/`](./resolver), and top-level `*.py`
+- Current milestone: Phase 4 hardening and legacy-boundary follow-up
+- Current runnable commands:
+  - `cpass` now launches the top-level interactive orchestrator when invoked without a subcommand:
+    it shows the banner, resolves or prompts for a session/login, prints account info, routes the
+    user through course selection, and then drops into the same TUI-backed run flow for supported
+    course execution
+  - `cpass doctor`
+  - `cpass config validate`
+  - `cpass login`
+  - `cpass courses list`
+  - `cpass courses show`
+  - `cpass tasks scan`
+  - `cpass exam show`
+  - `cpass exam export`
+  - `cpass exam preview export`
+  - `cpass run` drives the current Rust runtime path: it acknowledges reviewed fixture-backed
+    legacy video/document/live task points, can expose chapter-work runtime snapshots plus
+    answer-candidate preparation, and still blocks fail-closed before attendance, answer
+    submission, or other unreviewed write-side flows
+  - `cpass run --tui` wraps the same headless path in a CLI-owned event subscriber
+
+## Repository Layout
+
+- [`crates/cpass-core`](./crates/cpass-core): config, session, transport, parser, runners, and shared runtime contracts
+- [`crates/cpass-cli`](./crates/cpass-cli): native Rust command-line runtime and output adapters
+- [`fixtures/legacy`](./fixtures/legacy): legacy-derived fixtures for parser and compatibility tests
+- [`pyproject.toml`](./pyproject.toml), [`poetry.lock`](./poetry.lock), and [`main.py`](./main.py): Python runtime, locked dependencies, and entrypoint
+- [`docs/read-only-boundary.md`](./docs/read-only-boundary.md): allowlist and denylist for Phase 2 safe read-only endpoints
+- [`docs/course-runner.md`](./docs/course-runner.md): current `CourseRunner` scope, plan contract, and unsupported execution behavior
+- [`docs/task-executor-registry.md`](./docs/task-executor-registry.md): current executor registry scope, fail-closed queue-entry selection, and what still remains out of scope
+- [`docs/exam-runner.md`](./docs/exam-runner.md): current `ExamRunner` scope, supported preview question kinds, and preview-based safety boundary
+- [`docs/searcher-pipeline.md`](./docs/searcher-pipeline.md): shared Phase 3 answer-query pipeline plus the first local JSON and SQLite searcher backends
+- [`docs/automation-profiles.md`](./docs/automation-profiles.md): profile-driven automation recipes plus the remaining interactive boundaries for login, run, and export flows
+- [`docs/notification-pipeline.md`](./docs/notification-pipeline.md): CLI-owned notification summary and fan-out boundary for future Gotify/MQTT delivery
+- [`docs/legacy-reference.md`](./docs/legacy-reference.md): Python maintenance and Rust protocol comparison boundaries
+
+## Releases
+
+Date tags such as `v2026.10.08` publish the Python source archive, Windows x86_64 executable,
+and macOS arm64 / x86_64 application archives with SHA-256 checksums. Each frozen package
+passes an offline startup check before publication.
+
+## Build
+
+The Rust CLI and its Docker image remain available for native workspace development.
+
+### Local
 
 ```bash
-poetry run python3 main.py
+cargo fmt
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo run -p cpass-cli -- --help
 ```
 
-### 🐋使用  Docker  构建项目
-
-从 DockerHub 拉取最新镜像
+### Docker
 
 ```bash
-docker pull socialsisteryi/cx-kitty
+docker build -t cpass-rs .
+docker run --rm cpass-rs --help
 ```
 
-~~或手动构建镜像~~
+## Configuration
 
-<details>
-<summary>展开</summary>
+The Rust CLI keeps compatibility with the legacy top-level path keys in [`config.yml`](./config.yml):
 
-clone 项目到本地，并开始构建镜像
+- `session_path`
+- `log_path`
+- `export_path`
+- `face_image_path`
+- `searchers`
+- `notifications`
+
+It also supports a Rust-side transport/login section, shown in [`config.example.yml`](./config.example.yml).
+
+Named `profiles` can now layer non-interactive overrides on top of the root config for automation
+use cases. Path, login, and transport fields inherit from the root config unless the selected
+profile overrides them, while `searchers` and `notifications` replace the root lists only when the
+profile sets them. Select a profile with `--profile <name>` or `CPASS_PROFILE=<name>`.
+`config validate --json` and `doctor --json` now also surface `selected_profile` plus
+`automation_paths` so scripts can inspect the effective automation directories without having to
+reimplement profile selection or relative-path resolution.
+
+Session-backed commands now resolve saved sessions in this order: `--phone`, the effective
+`login.phone` after profile selection plus any `CPASS_PHONE` override, or the only saved session in
+the effective `session_path`. They fail closed when multiple saved sessions exist without an
+explicit selector, so automation profiles should pin a phone instead of relying on “latest
+session” behavior.
+[`docs/automation-profiles.md`](./docs/automation-profiles.md) now collects concrete profile recipes
+for `config validate`, `doctor`, `login`, `exam export`, `exam preview export`, and headless
+`run`, plus the remaining interactive boundaries that automation still has to respect.
+
+`cpass run` can now instantiate the first supported local searcher backends from `searchers[*]`:
+
+- `json` / legacy `jsonFileSearcher`: local JSON object where each key is a prompt or rendered
+  search text and each value is one answer string or a string list
+- `sqlite` / legacy `SqliteSearcher`: exact-match lookup against a local SQLite table, using
+  `file_path` plus optional `table` / `req_field` / `rsp_field` overrides
+- `http` / legacy `restApiSearcher` / `JsonApiSearcher`: outbound HTTP answer APIs with
+  fail-closed config validation, request construction, and JSON answer-path extraction documented
+  in [`docs/searcher-pipeline.md`](./docs/searcher-pipeline.md)
+- `openai-compatible` / legacy `OpenAISearcher`: chat-completions-style answer APIs with
+  validated `base_url` / `model` / `api_key`, DeepSeek V4.1 Flash thinking controls, prompt
+  templating, optional fixture replay, and the same fail-closed chapter-work boundary
+
+Candidate selection requires a complete, unambiguous answer for the four classic question
+types and agreement among valid provider results. Invalid or conflicting answers remain unresolved.
+Thinking traces are separate from final answers; truncated model responses cannot resolve a question.
+See [`docs/searcher-pipeline.md`](./docs/searcher-pipeline.md) for DeepSeek configuration.
+
+All four currently wired backends stay inside the same Phase 3 search-only boundary:
+`cpass run` can prepare chapter-work answer candidates from them, but it still stops fail-closed
+before any answer save or submit endpoint is called.
+
+The Phase 4 notification path now reserves a validated `notifications[*]` config shape for
+`gotify` and `mqtt` channels. The CLI actively delivers best-effort Gotify notifications for
+`doctor`, `config validate`, `login`, and `run`. MQTT now supports the same summary payload through
+either deterministic fixture replay or a one-shot live broker publish/disconnect flow for
+`mqtt://` and `mqtts://` targets, while keeping the same best-effort warning boundary when broker
+delivery fails. Lifecycle `RunEvent`s still fan into a CLI-owned summary collector first, which
+keeps the delivery wiring additive and reversible instead of requiring another config migration or
+pushing transport-specific concerns into `cpass-core`.
+
+Sensitive values should come from environment variables:
+
+- `CPASS_PHONE`
+- `CPASS_PASSWORD`
+- `CPASS_SESSION_DIR`
+- `CPASS_LOG_DIR`
+- `CPASS_EXPORT_DIR`
+- `CPASS_FACE_DIR`
+- `CPASS_REQUEST_TIMEOUT_SECS`
+- `CPASS_REQUEST_RETRIES`
+- `CPASS_OPENAI_API_KEY`
+
+## Command Examples
+
+Validate the normalized configuration:
 
 ```bash
-git clone 'https://github.com/SocialSisterYi/CxKitty'
-cd CxKitty
-docker build --tag socialsisteryi/cx-kitty .
+cargo run -p cpass-cli -- config validate --json
 ```
 
-</details>
-
-运行容器
-
-请按实际情况映射以下容器内路径：
-
-`/app/session`会话存档目录
-
-`/app/logs`程序日志目录
-
-`/app/export`试题导出目录 (根据配置文件修改，**如不需要可不映射**)
-
-`/app/faces`人脸上传目录 (根据配置文件修改，**如不需要可不映射**)
-
-`/app/config.yml`程序配置文件
-
-`/app/questions.json`json题库 (根据配置文件修改，**如不需要可不映射**)
-
-`/app/questions.db`sqlite题库 (根据配置文件修改，**如不需要可不映射**)
-
-由于程序使用 TUI，Docker 的日志服务会自动捕获并保存容器的 stdo，所以建议使用参数`--log-opt max-size=xx`限制容器的日志大小，以免造成过多的磁盘占用
+Validate the same config through an automation-oriented profile override:
 
 ```bash
-docker run -it \
-  --name cx_kitty \
-  -v "$PWD/session:/app/session"  \
-  -v "$PWD/export:/app/export" \
-  -v "$PWD/logs:/app/logs" \
-  -v "$PWD/faces:/app/faces" \
-  -v "$PWD/config.yml:/app/config.yml" \
-  #-v "$PWD/questions.json:/app/questions.json" \
-  #-v "$PWD/questions.db:/app/questions.db" \
-  --log-opt max-size=10m \
-  socialsisteryi/cx-kitty
+CPASS_PROFILE=automation cargo run -p cpass-cli -- config validate --json
 ```
-### ▶️可执行文件构建 (Windows/Linux/MacOS) (不建议使用)
 
-从[Action](https://github.com/SocialSisterYi/CxKitty/actions/workflows/package-exe.yml)中获取最新的自动构建文件,解压后执行文件
-
-<details>
-<summary>详细步骤</summary>
-
-
-点击[Action](https://github.com/SocialSisterYi/CxKitty/actions/workflows/package-exe.yml)
-
-右侧点击`绿色的` `最上面`的名为`Package Executable`
-
-跳转后拖到最底下
-
-选择你自己的系统,点一下就会下载
-
-解压出来后,先配置配置文件,然后执行文件就可以正常启动了
- 
-</details>
-
-## 🔨Configuration
-
-### 主程序配置
-
-配置文件使用 Yaml 语法编写，存放于 [config.yml](config.yml)
-
-请根据注释修改配置内容
-
-### 人脸识别配置
-
-人脸识别图片要求必须 .jpg 格式，存放于`face_image_path`配置的路径下，默认为`faces/`
-
-若`fetch_uploaded_face`字段为`true`，在登录成功后立即尝试拉取该用户预先上传的人脸图片，成功后以用户 puid 命名（eg：`114514.jpg`），存放于`face_image_path`配置的路径下，以备需要识别时读取
-
-人脸识别图片还可以自定义，要求图片文件名以 puid 命名，存放于`face_image_path`配置的路径下，但需要注意将`fetch_uploaded_face`设置为`false`，否则登录成功后会被覆盖
-
-也可以为每个自定义一组多张人脸图片，图片以 puid+序号 命名（eg：`114514_1.jpg`、`114514_2.jpg`），程序中使用正则`/\d+(_d+)?\.jpg/`遍历筛选，需要识别人脸时会从这组图片中随机抽取一张并上传
-
-### 题库配置
-
-单选题问题与答案应当一一对应，多选题使用`#`或`;`分隔每个选项，判断题答案只能为`对`、`错`、`正确`、`错误`、`√`、`×`
-
-REST API 搜题接口配置，确保接口`searcher->restApiSearcher->url`可以正确访问访问（若使用 Docker 搭建，而题库 API 服务在宿主机运行，应使用宿主机虚拟网关 IP 地址而不是本地回环地址）
-
-返回值必须为 JSON 格式，使用`rsp_field`字段作为选择器传入，使用 [JsonPath](https://goessner.net/articles/JsonPath/) 语法编写，如`$.data`或`$.data.answer[*]`等
-
-eg：
+Run an environment and filesystem check:
 
 ```bash
-curl 'http://127.0.0.1:88/v1/cx' \
-  --data-urlencode 'question=国字的演变的过程告诉我们,国防就是国家的防务,国防与()是密不可分的'  #  这里`question`为请求字段名
+cargo run -p cpass-cli -- doctor --json
 ```
 
-```js
-{
-    "code": 1,
-    "question": "国字的演变的过程告诉我们,国防就是国家的防务,国防与()是密不可分的",
-    "data": "国家",  // 这里的`data`为响应字段名
-    "hit": true
-}
+Create or refresh a session with password login:
+
+```bash
+export CPASS_PHONE="13800138000"
+export CPASS_PASSWORD="your-password"
+cargo run -p cpass-cli -- login --json
 ```
 
-JSON 题库，确保`searcher->jsonFileSearcher->file_path`可以访问（使用 Docker 需要设置映射），key 为题目，value 为与之对应的答案
+List courses using the selected saved session:
 
-eg：
-
-```json
-{
-  "国字的演变的过程告诉我们,国防就是国家的防务,国防与()是密不可分的": "国家"
-}
+```bash
+cargo run -p cpass-cli -- courses list --json
 ```
 
-SQLite 题库，确保`searcher->sqliteSearcher->file_path`可以访问（使用 Docker 需要设置映射），表中应存在配置的请求和响应字段
+Show a single course snapshot using either `--course-id` or `--course-index`:
 
-eg：
-
-```sql
-SELECT answer FROM questions WHERE question = '国字的演变的过程告诉我们,国防就是国家的防务,国防与()是密不可分的';
+```bash
+cargo run -p cpass-cli -- courses show --course-id 1001 --json
 ```
 
+Scan chapter progress for a course:
+
+```bash
+cargo run -p cpass-cli -- tasks scan --course-id 1001 --json
 ```
-国家
+
+`tasks scan` now includes a read-only task-point summary for each chapter when the chapter-card response is available.
+
+When attachment metadata is available, `tasks scan` stays inside a narrow read-only boundary. It only reuses the read-only `GET /knowledge/cards` chapter-card snapshot to inspect embedded video/document resources, plus `GET /ananas/status/{objectId}` for video duration and stream metadata. It does not call video play-report endpoints such as `/multimedia/log/a`, document reading-report endpoints such as `/ananas/job/document`, or any other completion/progress reporting route that could mark a task point as finished or advance playback state.
+
+That means the current attachment export is limited to metadata already exposed by those passive snapshots: resource identifiers, titles, job flags, document descriptors, and video status fields. If Chaoxing requires an active playback, reading, or reporting endpoint to reveal more detail, `cpass-rs` intentionally leaves that information out of Phase 2 `tasks scan`.
+
+The exact Phase 2 allowlist and denylist live in [`docs/read-only-boundary.md`](./docs/read-only-boundary.md).
+
+Build the current headless course run path, which can complete supported legacy video/document task points while keeping unsupported modules fail-closed:
+
+```bash
+cargo run -p cpass-cli -- --fixture-dir fixtures/legacy_run_document run --course-id 1001 --json
 ```
 
-Enncy 题库，使用前请注册并获取 Token 填写在配置文件中（第三方题库）
+`cpass run` still reuses the same read-only course resolution and task-scan flow as `courses list` plus `tasks scan`, then turns that snapshot into a deterministic `CourseRunPlan`. The JSON output includes both `execution_preflight`, a registry summary keyed by `execution_queue[*].queue_index`, and `execution_result`, the runtime snapshot produced by the headless queue driver after it starts dispatching the queue. Planning and runtime `events` are still buffered by the CLI-side output adapter instead of by `cpass-core`, and the CLI can now fan those same events out to a notification-summary collector without changing the runner boundary. That keeps the runner and driver independent from any concrete CLI, TUI, or future notification backend implementation while leaving event collection on the UI side of the boundary. The plan still includes both the nested chapter/task view and a flattened `execution_queue` that preserves the same stable ordering for later executors.
 
-通过此 [链接](https://tk.enncy.cn/) 获取 Token
+The current CLI path uses a mixed executor stack built from the core `HeadlessVideoCourseRunExecutor`, `HeadlessDocumentCourseRunExecutor`, the fail-closed live-task path, and the fail-closed chapter-work executor. It emits one legacy `/multimedia/log/a/{cpi}/{dtoken}` play-report acknowledgement for supported fixture-backed video entries, one legacy `/ananas/job/document` reading-report acknowledgement for supported fixture-backed document entries, blocks registered `live` entries before any runtime live endpoint is called, optionally prepares local JSON-backed chapter-work candidate selections, records those runtime events, and then still stops fail-closed before any chapter-work answer save or submit route is called. That means `cpass run` now exercises two real module-specific runtime paths plus two explicit fail-closed handoff paths while keeping later mutation blocked until the corresponding endpoint contracts are reviewed.
 
-网课小工具（Go题）题库，使用前请注册并获取 Token 填写在配置文件中（第三方题库）
+Subscribe to the same planning/runtime `RunEvent` stream through the thin CLI-owned TUI shell:
 
-获取 Token 方式见 [文档](https://cx.icodef.com/1-UserGuide/1-6-gettoken.html#%E8%8E%B7%E5%8F%96token)
+```bash
+cargo run -p cpass-cli -- --fixture-dir fixtures/legacy_run_document run --course-id 1001 --tui
+```
 
-题库海 题库，使用前请注册并获取 Token 填写在配置文件中（第三方题库）
+If you prefer to start from the binary directly, invoking `cpass` with no subcommand now launches
+the top-level interactive orchestrator. It shows the banner, resolves a saved session (or prompts
+for password login or QR login when no session exists), lists available courses, accepts course
+index / name / `course_id` selectors, and then drops into the same TUI-backed run path for
+supported course execution:
 
-通过此 [链接](https://afdian.net/a/jiaoyu666) 获取 Token
+```bash
+cargo run -p cpass-cli --
+```
 
-柠檬题库，使用前请注册并获取 Token 填写在配置文件中（第三方题库）
+The launcher also supports the legacy `EXAM|...` selector prefix in a read-only form. After the
+course selector resolves, it shows the course exam list and accepts:
 
-通过此 [链接](https://www.lemtk.xyz) 获取 Token
+- exam index → render the same safe `exam show` snapshot inline
+- `e<index>` → export the same safe `exam preview export` manifest
+- `q` → exit the launcher
 
-### ChatGPT 在线答题
+That route intentionally stays inside the current read-only safety boundary: it does not start,
+submit, or otherwise mutate an exam session.
 
-ChatGPT 在线答题，使用前请注册并获取 API Key 填写在配置文件中（大语言模型）
+The default top-level interactive launcher is intentionally broader than `run --tui`: it owns the
+banner, session/login prompts, and course routing before it hands a selected course off to the same
+TUI-backed execution path. `cpass run --tui` still stays outside `cpass-core`. It does not inspect
+transport state directly, build its own planner output, or add any new execution behavior. The
+shell only subscribes to the existing `RunEvent` stream emitted by `CourseRunner`,
+`CourseRunHeadlessDriver`, and the current mixed video/document/live/chapter-work executor path,
+then renders planning status, queue-state transitions, warnings, and recent events on the CLI side.
 
-可以考虑换成一些 GPT 代理站点，或考虑使用**超高性价比新兴国产开源大模型** [DeepSeek](https://platform.deepseek.com/docs)。
+When the interactive launcher hits a malformed JSON / HTML contract break from the backend or a
+fixture, it now translates that failure back into the legacy relogin hint instead of dumping the
+raw serde parse prefix directly into the terminal.
 
-DeepSeek 使用与 OpenAI 兼容的 API 格式，只需修改 `base_url` 和 `model` 即可使用。
+When stdout is a real terminal, the shell uses a lightweight alternate-screen refresh loop. When stdout is redirected or captured, it falls back to emitting one final plain-text snapshot so logs and offline integration tests stay deterministic. `--tui` cannot be combined with `--json`.
 
-特别注意，尽管 DeepSeek 性价比极高且中文能力相当强，但它的**知识储备不足**且**在部分领域受到较大限制**。
+When `tasks scan` already exposed safe attachment metadata, `cpass run` now carries that same read-only snapshot forward into the plan so future executors can reuse video/document descriptors without adding a second scan pass or widening the safety boundary.
 
-可在此处查看：[DeepSeek 模型列表](https://platform.deepseek.com/api-docs/zh-cn/#%E6%A8%A1%E5%9E%8B)、[GPT 模型列表](https://platform.openai.com/docs/models)。
+Known module kinds are currently limited to `insertvideo`, `insertdoc`, `insertlive`, and `work`. Any other task-point module is preserved in the output as `unknown(...)` so it can be fixture-captured and wired into a future executor without changing the planning contract. The planner now also preserves each chapter-card iframe's raw `data` JSON as `iframe_data` on both `task_points[*]` and `execution_queue[*]`, which keeps future module work such as live task-point support grounded in the original legacy snapshot instead of forcing a second chapter-card fetch. `execution_preflight.all_entries_registered` only tells you whether the registry recognized every planned queue entry; it does not mean the queue completed successfully. The current CLI can acknowledge fixture-backed `video` and `document` entries through the headless executor stack, while `live` and `chapter_work` still fall back to explicit fail-closed blocking before any unverified runtime endpoint is called. The full current contract and unsupported behaviors are documented in [`docs/course-runner.md`](./docs/course-runner.md).
 
-## 📖Usage & Demo
+Export the exam catalog for a course:
 
-**注：本项目并非小白向“开箱即用”类型，需要一定的计算机专业技术能力；如需使用自动答题功能，请确保您拥有准确无误的题库资源**
+```bash
+cargo run -p cpass-cli -- exam export --course-id 1001 --json
+```
 
-修改正确的配置文件，并提供配置中定义的资源，运行主程序，进行选择会话存档，若少于一个会话存档，则直接进入登录界面
+`exam export` includes catalog entries plus safe read-only cover metadata when the exam cover page is reachable.
 
-登录界面输入手机号后按回车键输入密码，再按回车键进行登录
+Show a single exam snapshot using the same read-only catalog + cover metadata path:
 
-登录界面直接按下回车键则会显示二维码，使用学习通手机客户端扫描登录
+```bash
+cargo run -p cpass-cli -- exam show --course-id 1001 --exam-id 555001 --json
+```
 
-![](imgs/demo1.png)
+`exam show` stays within the same safe boundary as `exam export`: it resolves a course, reads the exam catalog, and fetches the existing read-only exam cover page for one exam. It does not call any route that would start an exam attempt, submit answers, or advance exam state.
 
-按照提示选择目标课程，多个课程之间使用`,`分隔，使用**课程选择器语法**，如下：
+Replay a read-only question inventory from a recorded exam preview snapshot:
 
-- 课程序号：`0`、`1`、`2`
-- 课程序号范围：`0-3`、`5-10`
-- 课程名：`"解析几何"`、`"马克思主义"`（非重复项可省略后半部分）
-- 课程 courseId：`#23026xxx`、`#22928xx`
+```bash
+cargo run -p cpass-cli -- --fixture-dir fixtures/legacy exam preview export --course-id 1001 --exam-id 555001 --json
+```
 
-![](imgs/demo2.png)
+`exam preview export` is intentionally conservative. It only reads the exam list, the read-only cover page metadata, and the read-only `/exam-ans/exam/phone/preview` page. It does not call `/exam/phone/start`, single-question fetch endpoints, answer submission endpoints, or any other route that could start a timer, create a fresh attempt, or mutate state.
 
-程序会自动完成视频及测验任务点，并展示章节任务点情况
+Because of that boundary, the command only works when the existing read-only metadata already contains the `exam_answer_id` needed to address a previously-entered preview snapshot. The fixture-backed path in `fixtures/legacy/` is the reference implementation for this Phase 2 export. If the cover page redirects to a completed or blocked flow, or if the platform does not expose enough preview parameters without entering the exam, the CLI fails closed instead of attempting a side-effecting request.
 
-![](imgs/demo3.png)
+For the exact endpoint boundary that governs `courses`, `tasks`, and `exam` read-only commands, see [`docs/read-only-boundary.md`](./docs/read-only-boundary.md).
 
-如需要完成课程`0`、课程`1-3`、课程`解析几何`则输入：`0,1-3,"解析几何"`
+Replay read-only commands against recorded fixtures instead of the live network:
 
-如需进入**考试模式**，那么需要在指定课程（使用**课程选择器语法**）前输入`EXAM|`，即可进入二级菜单，如：
+```bash
+cargo run -p cpass-cli -- --fixture-dir fixtures/legacy courses list --json
+```
 
-`EXAM|0`、`EXAM|"解析几何"`等
+## CI and Release
 
-若配置文件的`exam->confirm_submit`为`true`那么在交卷前会提示确认，否则将自动交卷
+The repository now uses Rust-focused automation:
 
-如需导出题库到 export 路径，需在考试选择界面输入`e`+序号
+- PR and `main` pushes run `cargo fmt --check`, `cargo clippy`, `cargo test`, `cargo build --release`, and a Docker smoke test
+- tag builds produce release binaries for Linux, macOS, and Windows
+- tag builds also push versioned Docker images
 
-![](imgs/demo4.png)
+See:
 
-## 💡About Repo Name
+- [`ci.yml`](./.github/workflows/ci.yml)
+- [`release.yml`](./.github/workflows/release.yml)
 
-项目的中文名`超星学习通答题姬`早已确定，英文名想到过`CxHime`、`CxExamHime`、`CxCourseHime`然而都非常拗口，故弃用
+## Legacy Boundary
 
-又想到`CxHelper`这个名，但`helper`一词易使人联想到木马病毒可执行程序的文件名，很不吉利
+The Python code is preserved because it still contains useful protocol knowledge and real-world behavior. It is not a supported runtime.
 
-最后由`CxKit`衍生出`CxKitty`这个名，一语双关`kitty`自有“猫娘”含义，~~同时由于项目首字母缩写是`cxk`，亦可解释为`答题只因`~~
+Use the legacy tree only for:
 
-## ⚠️Disclaimers
+- capturing fixtures
+- comparing outputs
+- clarifying undocumented protocol behavior
 
-- 本项目以 [GPL-3.0 License](https://github.com/SocialSisterYi/CxKitty/blob/main/LICENSE) 作为开源协议，这意味着你需要遵守相应的规则
-- 本项目仅适用于**学习研究**，任何人不得以此用于**盈利**
-- 使用本项目造成的任何后果与本人无关
+Do not add net-new features to the Python path unless the work is strictly needed to support the Rust rewrite.
 
-## 📈Stargazers
+### Legacy Python workflow rules
 
-[![Stargazers over time](https://starchart.cc/SocialSisterYi/CxKitty.svg)](https://starchart.cc/SocialSisterYi/CxKitty)
+Treat the Python tree as a lab bench, not as a second product surface:
 
-## 🔗Link Repos
+- reach for Rust first whenever the outcome is a user-facing command, config contract, parser, transport, test, or documentation change
+- use Poetry / the Python environment only when you need to capture fresh protocol fixtures, compare Rust behavior against a legacy response, or confirm how an undocumented legacy flow behaved
+- land durable results in Rust-owned artifacts such as `fixtures/`, `crates/`, golden baselines, and docs; avoid leaving the final behavior encoded only in Python
+- keep any Python-side changes narrowly scoped to capture helpers, fixture notes, or protocol annotations instead of shipping new automation features
+- if a diff touches only Python files, it should also make the Rust-side handoff explicit (fixture capture, protocol comparison note, or follow-up contract); otherwise the change probably belongs under `crates/` or `docs/`
 
-[Samueli924/chaoxing: 超星学习通/超星尔雅/泛雅超星全自动无人值守完成任务点 (github.com)](https://github.com/Samueli924/chaoxing)
+In practice, that means `cargo ...` remains the default setup and validation path for normal development, while
+`poetry install` is now an opt-in legacy workflow reserved for fixture capture or protocol comparison sessions.
+If a review ever sees a Python-only diff without a clear fixture-capture or protocol-comparison
+handoff, treat that as a sign the change probably belongs under `crates/` or the Rust-owned docs
+instead. [`docs/legacy-reference.md`](./docs/legacy-reference.md) is the canonical checklist for
+that audit.
 
-[RainySY/chaoxing-xuexitong-autoflush: 超星学习通全自动无人值守视频刷课程序，使用协议发包来实现。 (github.com)](https://github.com/RainySY/chaoxing-xuexitong-autoflush)
+## Legal and Risk Notice
 
-[lyj0309/chaoxing-xuexitong-autoflush: 超星学习通全自动无人值守刷课程序，使用协议发包来实现，无需浏览器，支持自动过测验、过视频。 (github.com)](https://github.com/lyj0309/chaoxing-xuexitong-autoflush)
-
-[chettoy/FxxkStar: API and unofficial client for the SuperStar mooc platform | 超星学习通的API和非官方客户端脚本，为学生提供更好的学习体验 (github.com)](https://github.com/chettoy/FxxkStar)
-
-[ocsjs/ocsjs: OCS 网课助手，网课脚本，帮助大学生解决网课难题 ，目前支持网课：超星学习通，知道智慧树 ， 支持脚本猫以及油猴脚本运行。 (github.com)](https://github.com/ocsjs/ocsjs)
-
-[SocialSisterYi/xuexiaoyi-to-xuexitong-tampermonkey-proxy: 基于“学小易”搜题API的学习通答题/考试油猴脚本题库代理 (github.com)](https://github.com/SocialSisterYi/xuexiaoyi-to-xuexitong-tampermonkey-proxy)
-
-[CodFrm/cxmooc-tools: 一个 超星(学习通)/智慧树(知到)/中国大学mooc 学习工具,火狐,谷歌,油猴支持.全自动任务,视频倍速秒过,作业考试题库,验证码自动打码(੧ᐛ੭挂科模式,启动) (github.com)](https://github.com/CodFrm/cxmooc-tools)
+This repository is intended for protocol and automation research. It does not ship question-bank data. If you use it, you are responsible for your own environment, account, and compliance obligations.

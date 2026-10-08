@@ -1,0 +1,14 @@
+{
+  "data": [
+    {
+      "card": {
+        "data": [
+          {
+            "title": "图文作业",
+            "description": "<iframe module=\"work\" data='{\"workid\":\"work-001\",\"_jobid\":\"job-001\"}'></iframe>"
+          }
+        ]
+      }
+    }
+  ]
+}
