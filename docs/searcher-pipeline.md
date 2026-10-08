@@ -18,7 +18,7 @@ later searchers and executors will share is:
 - `ChapterWorkQueryBatch`: a runtime chapter-work snapshot normalized into search-ready queries
 - `AnswerCandidate`: one provider-attributed answer candidate
 - `AnswerCandidateSelection`: one executor-facing question plus all collected candidates and the
-  current preferred candidate
+  validated selected candidate
 - `ChapterWorkCandidateSelectionBatch`: one chapter-work batch plus provider-ordered selection
   results for each question
 - `SearcherPipeline`: a provider-ordered fan-out helper that preserves configured provider order
@@ -102,7 +102,10 @@ until fixture-backed parser fields exist for the missing structure.
 The currently supported local providers are:
 
 - JSON: accepts a local object-shaped file where each key is either the raw prompt or the rendered
-  search text above, and each value is either one answer string or a list of answer strings.
+  search text above, and each value is one answer string or an ordered answer array. Arrays
+  stay intact for complete multiple-choice or fill-blank validation; they are never split into
+  unrelated candidates. SQLite rows remain independent candidates: store a complete blank
+  array as JSON text in one row, or use a complete `#`-separated answer.
   Relative `file_path` values resolve from the config file directory.
 - SQLite: performs an exact-match lookup against one local table, defaulting to
   `question(question, answer)` and supporting optional `table`, `req_field`, and `rsp_field`
@@ -137,7 +140,8 @@ The template can deterministically turn one `AnswerQuery` into one `HttpSearcher
   and numeric array indexes like `[0]`
 - it issues the normalized request through `reqwest`, parses the response as JSON, and then walks
   the validated `answer_path`
-- it only collects scalar answer leaves (strings, numbers, booleans, or nested arrays of those);
+- it preserves answer arrays for multiple-choice and fill-blank queries and collects scalar
+  answer leaves for other kinds;
   missing paths, `null`, and object-shaped payloads resolve to no candidates instead of guesses
 
 `build_searcher_pipeline` now wires `http`, `restApiSearcher`, and `JsonApiSearcher` directly into
@@ -172,8 +176,13 @@ provider-ordered candidate selections from the fetched `ChapterWorkFormSnapshot`
 
 - it first normalizes the runtime snapshot into `ChapterWorkQueryBatch`
 - it fans each query out through `SearcherPipeline` in configured provider order
-- it stores all returned `AnswerCandidate`s per question while picking the current preferred
-  candidate as the first provider-ordered match
+- it keeps every raw `AnswerCandidate` for review, normalizes the four classic question types,
+  and selects a canonical answer only when complete, unambiguous valid candidates agree
+- conflicting valid sources, partial answers, ambiguous option text, inline analysis, malformed
+  JSON/fences, and unsupported kinds remain unresolved; invalid sources never win by ordering
+- complete leading `<think>...</think>` blocks are excluded from the answer; embedded or
+  unclosed thinking tags remain unresolved. JSON `answer` / `answers` wrappers, complete
+  fences, exact option labels/text, boolean `false`, and exact blank counts are supported
 - it emits only a summary-level runtime event and then still stops fail-closed before any answer
   save or submit endpoint is called
 
@@ -181,7 +190,7 @@ This is still intentionally just scaffolding. The preferred candidate is not yet
 the work form, but the public CLI can now instantiate configured `json` / legacy
 `jsonFileSearcher` and `sqlite` / legacy `SqliteSearcher` providers and feed them into the
 fail-closed chapter-work executor. That keeps the boundary explicit: search-only normalization and
-selection are now possible inside the executor contract, but mutation remains blocked until later
+strict selection are now possible inside the executor contract, but mutation remains blocked until later
 Phase 3 items land.
 
 That fail-closed boundary is especially important for richer or media-heavy question layouts. The
@@ -205,10 +214,18 @@ provider deliberately narrow and fail-closed:
   `{search_text}`, and supports placeholder substitution for `{type}`, `{value}`, `{question}`,
   `{options}`, `{blanks}`, and `{search_text}`
 - `OpenAiCompatibleRequest` narrows the outbound payload to one system message plus one user
-  message derived from the normalized `AnswerQuery`
-- `OpenAiCompatibleResponse` currently accepts only the common `choices[*].message.content`
-  chat-completions shape so the provider can stay fail-closed instead of guessing across
-  incompatible payloads
+  message derived from the normalized `AnswerQuery`, with optional validated `thinking`,
+  `reasoning_effort`, `max_tokens`, and `response_format` fields; unset fields are omitted
+- `thinking` accepts only `{type: enabled}` or `{type: disabled}`. `reasoning_effort` accepts
+  `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, or `ultra`; contradictory thinking
+  controls are rejected. `max_tokens` must be a positive integer
+- `response_format` accepts only `{type: text}` or `{type: json_object}`. JSON mode appends an
+  instruction and examples such as `{"answer":"A"}` and `{"answers":["A","C"]}` to the system
+  prompt so the requested format has an explicit answer contract
+- `OpenAiCompatibleResponse` accepts the common `choices[*].message.content` chat-completions
+  shape. Separate `reasoning_content` is ignored and never used as an answer. Explicit
+  `finish_reason` values other than `stop` produce no candidate; absent values remain compatible
+  with existing gateway/fixture responses
 - `OpenAiCompatibleSearcherProvider` sends one authorized chat-completions request per
   `AnswerQuery`, returns at most the first non-empty `choices[*].message.content` answer
   candidate, and supports backend injection or fixture-backed responses for isolated tests
@@ -218,6 +235,17 @@ provider deliberately narrow and fail-closed:
 - `CPASS_OPENAI_API_KEY` can still inject the `api_key` field for `openai-compatible`,
   `OpenAISearcher`, or `openai` searcher entries at config-load time, keeping secrets outside the
   checked-in YAML samples
+
+DeepSeek-V4.1-Flash uses the official API model id `deepseek-flash`. When the configured URL host
+is exactly `api.deepseek.com`, `deepseek-v4.1-flash` is accepted as a local alias for that model;
+gateway model names are passed through unchanged. On the official host only, effort aliases map
+`minimal` to `low`, `medium`/`xhigh` to `high`, and `ultra` to `max`, and `max_tokens` is capped at
+393216. Thinking can remain enabled while the answer pipeline consumes only the final content;
+this searcher uses one-shot Chat Completions without tools or conversational reasoning replay.
+The current request contract follows the official [model list](https://api-docs.deepseek.com/api/list-models/),
+[thinking controls](https://api-docs.deepseek.com/guides/thinking_mode/),
+[Chat Completions schema](https://api-docs.deepseek.com/api/create-chat-completion/), and
+[JSON output requirements](https://api-docs.deepseek.com/guides/json_mode/).
 
 That means the public CLI can now use local JSON, SQLite, HTTP, or OpenAI-compatible answer
 providers to prepare chapter-work candidate selections from the same typed runtime snapshot while

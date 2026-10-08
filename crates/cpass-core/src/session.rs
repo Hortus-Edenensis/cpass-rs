@@ -128,7 +128,7 @@ impl SessionStore for FileSessionStore {
 
     fn load_latest(&self) -> Result<SessionRecord> {
         let mut records = self.list()?;
-        records.sort_by(|left, right| right.saved_at.cmp(&left.saved_at));
+        records.sort_by_key(|record| std::cmp::Reverse(record.saved_at));
         records
             .into_iter()
             .next()

@@ -688,7 +688,7 @@ async fn resolve_interactive_auth(
 ) -> Result<Option<InteractiveAuthResult>> {
     let store = FileSessionStore::new(config.paths.session_dir.clone());
     let mut sessions = store.list()?;
-    sessions.sort_by(|left, right| right.saved_at.cmp(&left.saved_at));
+    sessions.sort_by_key(|session| std::cmp::Reverse(session.saved_at));
 
     if sessions.is_empty() {
         return prompt_interactive_login(config, fixture_dir).await;

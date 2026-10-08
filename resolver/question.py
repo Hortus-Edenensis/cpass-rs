@@ -74,25 +74,57 @@ def _has_analysis(text: str) -> bool:
     )
 
 
+def _unique_json_object(pairs):
+    fields = {}
+    for key, value in pairs:
+        if key in fields:
+            raise ValueError("答案字段重复")
+        fields[key] = value
+    return fields
+
+
+def _has_thinking(text: str) -> bool:
+    return re.search(r"</?think\b", unescape(text), flags=re.IGNORECASE) is not None
+
+
 def _answer_field(answer):
-    if not isinstance(answer, str):
-        return answer
-    answer = unescape(answer).strip()
-    if answer.startswith("```") and answer.endswith("```"):
-        answer = "\n".join(answer.splitlines()[1:-1]).strip()
-    if answer.startswith(("{", "[")):
+    if isinstance(answer, str):
+        answer = unescape(answer).strip()
+        if answer.casefold().startswith("<think>"):
+            thinking = re.match(r"<think>(.*?)</think>\s*", answer, flags=re.IGNORECASE | re.DOTALL)
+            if thinking is None or _has_thinking(thinking[1]):
+                return None
+            answer = answer[thinking.end() :]
+        if _has_thinking(answer):
+            return None
+        if "```" in answer:
+            fenced = re.fullmatch(
+                r"```(?:json|text)?[ \t]*\r?\n(.*?)\r?\n```[ \t]*",
+                answer,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+            if fenced is None or "```" in fenced[1]:
+                return None
+            answer = fenced[1].strip()
+        if answer.startswith(("{", "[", '"')):
+            try:
+                answer = json.loads(answer, object_pairs_hook=_unique_json_object)
+            except (ValueError, TypeError, RecursionError):
+                return None
+    # JSON 题库保留对象的字段对，以免重复键被悄悄覆盖。
+    if isinstance(answer, tuple):
         try:
-            value = json.loads(answer)
+            answer = _unique_json_object(answer)
         except (ValueError, TypeError):
             return None
-        if isinstance(value, dict):
-            fields = [key for key in ("answer", "答案") if key in value]
-            if len(fields) != 1:
-                return None
-            answer = value[fields[0]]
-        else:
-            answer = value
+    if isinstance(answer, dict):
+        fields = [key for key in ("answer", "answers", "答案") if key in answer]
+        if len(fields) != 1:
+            return None
+        answer = answer[fields[0]]
     if isinstance(answer, str):
+        if _has_thinking(answer) or "```" in answer:
+            return None
         answer = re.split(
             r"\n\s*(?:解析|解释|理由|说明|analysis|explanation|reason)\s*[:：]",
             answer,
@@ -108,6 +140,10 @@ def _answer_field(answer):
         )
         if _has_analysis(answer):
             return None
+    elif isinstance(answer, list) and any(
+        isinstance(value, str) and (_has_thinking(value) or "```" in value) for value in answer
+    ):
+        return None
     return answer
 
 

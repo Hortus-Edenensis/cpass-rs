@@ -1,14 +1,27 @@
 #!/bin/python3
-"""Legacy-only Python reference entrypoint.
-
-The supported runtime for this repository is the Rust CLI under `crates/`.
-Use this file only for fixture capture or protocol-comparison investigations.
-"""
+"""Python interactive runtime and offline packaged dependency self-check."""
 
 import json
 import sys
 import time
 from os import PathLike
+
+_SELF_CHECK = __name__ == "__main__" and "--self-check" in sys.argv[1:]
+if _SELF_CHECK:
+    import atexit
+    import os
+    from tempfile import TemporaryDirectory
+
+    # Imports initialize OCR and runtime folders; keep all self-check state disposable.
+    _self_check_cwd = os.getcwd()
+    _self_check_dir = TemporaryDirectory(prefix="cxkitty-self-check-")
+    os.chdir(_self_check_dir.name)
+
+    def _cleanup_self_check():
+        os.chdir(_self_check_cwd)
+        _self_check_dir.cleanup()
+
+    atexit.register(_cleanup_self_check)
 
 from rich.align import Align
 from rich.console import Console
@@ -33,6 +46,64 @@ from cxapi.exception import ChapterNotOpened, TaskPointError
 from logger import Logger
 from resolver import DocumetResolver, MediaPlayResolver, QuestionResolver
 from utils import __version__, ck2dict, sessions_load
+
+if _SELF_CHECK:
+    from io import BytesIO
+
+    import cv2
+    import onnxruntime
+    from bs4 import BeautifulSoup
+    from ddddocr import DdddOcr
+    from PIL import Image
+
+    from cxapi.exam import parse_question
+    from cxapi.schema import is_valid_answer
+    from cxapi.session import ocr
+    from resolver.question import normalize_answer
+
+    if not isinstance(ocr, DdddOcr):
+        raise RuntimeError("OCR model was not initialized")
+    image = BytesIO()
+    Image.new("RGB", (96, 32), "white").save(image, format="PNG")
+    if not isinstance(ocr.classification(image.getvalue()), str):
+        raise RuntimeError("OCR inference self-check failed")
+    checked_types = []
+    for kind, answer, expected in (
+        (0, "A", "A"),
+        (1, ["A", "B"], "AB"),
+        (2, ["填空"], ["填空"]),
+        (3, "false", False),
+    ):
+        node = BeautifulSoup(
+            f'<div><input name="questionId" value="42"><input name="type42" value="{kind}">'
+            '<div class="tit"><h3>题型</h3>1.题<span>目</span></div>'
+            '<div class="answerList radioList" name="A"><cc>甲</cc></div>'
+            '<div class="answerList radioList" name="B"><cc>乙</cc></div>'
+            '<div class="completionList objectAuswerList"><span class="grayTit">空</span>'
+            '<textarea class="blanktextarea"></textarea></div></div>',
+            "lxml",
+        ).div
+        question = parse_question(node)
+        question.answer = normalize_answer(question, answer)
+        if question.value != "题目" or question.answer != expected or not is_valid_answer(question):
+            raise RuntimeError(f"Question self-check failed for type {kind}")
+        checked_types.append(kind)
+    print(
+        json.dumps(
+            {
+                "status": "ok",
+                "version": __version__,
+                "dependencies": {
+                    "cv2": cv2.__version__,
+                    "onnxruntime": onnxruntime.__version__,
+                    "ddddocr": "inference_checked",
+                },
+                "question_types": checked_types,
+            },
+            ensure_ascii=False,
+        )
+    )
+    sys.exit(0)
 
 api = ChaoXingAPI()
 console = Console(height=config.TUI_MAX_HEIGHT)
@@ -171,7 +242,7 @@ def fuck_task_worker(chap: ChapterContainer):
                     task_point.fetch_attachment()
                 except ChapterNotOpened:
                     if refresh_flag:
-                        chap.refresh_chapter(index-1)
+                        chap.refresh_chapter(index - 1)
                         refresh_flag = False
                         continue
                     else:

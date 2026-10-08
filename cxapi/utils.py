@@ -163,18 +163,38 @@ def normalize_text(text: str) -> str:
     return " ".join(re.sub(r"[\u200b\u200c\u200d\u2060\ufeff]", "", unescape(text)).split())
 
 
+def saved_answer_value(node, selector: str) -> str:
+    values = {field.get("value", "").strip() for field in node.select(selector)}
+    if values and all(value.casefold() in {"true", "false"} for value in values):
+        values = {value.casefold() for value in values}
+    if len(values) > 1:
+        raise ValueError("已有答案字段冲突")
+    return next(iter(values), "")
+
+
 def html_text(node) -> str:
     """保留行内文字连接以及显式段落、换行。"""
     if node is None:
         raise ValueError("缺少正文节点")
     node = copy(node)
+    # 扁平化公式会把不同题干或选项变成同一段文字。
+    for tag in node.select("math"):
+        if tag.parent is not None:
+            tag.replace_with(str(tag))
+    for tag in node.select("script"):
+        if tag.get("type", "").split(";", 1)[0].strip().casefold() == "math/tex":
+            tag.replace_with(r"\(" + tag.get_text() + r"\)")
+    for tag in node.select("sup, sub"):
+        tag.insert_before("^{" if tag.name == "sup" else "_{")
+        tag.insert_after("}")
+        tag.unwrap()
     for text in list(node.find_all(string=True)):
         if isinstance(text, Comment):
             text.extract()
             continue
         # 源码缩进不是题干换行；只有块元素和 br 产生换行。
         value = re.sub(r"\s+", " ", text)
-        text.replace_with("" if not text.strip() and "\n" in text else value)
+        text.replace_with(value)
     for tag in node.select("script, style, input, button"):
         tag.decompose()
     for tag in node.select("br"):

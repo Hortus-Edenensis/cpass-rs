@@ -51,6 +51,17 @@ searchers:
   #   system_prompt: "你是一位答题助手。请只输出答案本身，不要解释。"
   #   prompt_template: "{search_text}"
   #   fixture_response_path: null # optional offline replay JSON, resolved from this config dir
+  # - type: openai-compatible
+  #   base_url: "https://api.deepseek.com"
+  #   model: "deepseek-flash" # Official API id for DeepSeek-V4.1-Flash; gateway ids stay unchanged.
+  #   # Set CPASS_OPENAI_API_KEY instead of storing the API key here.
+  #   thinking:
+  #     type: enabled # enabled / disabled; pair disabled with reasoning_effort: none
+  #   reasoning_effort: high # Official efforts: none / low / high / max
+  #   max_tokens: 32768
+  #   response_format:
+  #     type: json_object # Adds a JSON answer instruction and examples to the system prompt.
+  #   prompt_template: "{search_text}"
 
 notifications:
   # Gotify delivery stays on the CLI side of the boundary. MQTT supports both deterministic

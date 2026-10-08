@@ -4356,13 +4356,13 @@ mod tests {
                 queue_index: 1,
                 work_answer_id: 99001,
                 total_questions: 3,
-                selected_questions: 3,
+                selected_questions: 1,
             }
         );
         assert_eq!(
             events[2],
             RunEvent::Warning {
-                message: "queue entry 1 prepared chapter-work candidate selections for 3/3 questions from snapshot 99001 and stopped fail-closed before any answer save or submit endpoint is called".to_owned(),
+                message: "queue entry 1 prepared chapter-work candidate selections for 1/3 questions from snapshot 99001 and stopped fail-closed before any answer save or submit endpoint is called".to_owned(),
             }
         );
     }

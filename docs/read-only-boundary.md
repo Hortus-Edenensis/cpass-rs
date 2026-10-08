@@ -76,3 +76,20 @@ Before adding any new endpoint to a read-only command:
 4. Update this document and the Phase checklist entry in [`AGENTS.md`](../AGENTS.md) before treating the route as approved.
 
 When there is ambiguity, keep the endpoint out of scope and fail closed.
+
+## Question snapshot parsing
+
+Exam preview types are read from the exact `type<questionId>` field; display fields
+such as `typeName<questionId>` cannot override them. Preview and chapter-work
+inventories reject non-positive or duplicate question IDs, invalid or duplicate
+option keys, and empty prompts. Chapter-work inventories also require the parsed
+question count to match `totalQuestionNum`. A malformed inventory fails as a whole
+instead of exposing a partial set of questions as complete.
+
+Prompts and option text retain inline text, paragraph breaks, superscripts
+(`^{...}`), subscripts (`_{...}`), MathML structure, and `math/tex` script content
+(`\(...\)`). Ordinary script/style content is excluded from searchable text.
+Existing rich-option HTML and image URLs remain available as snapshot metadata;
+this does not add OCR or rendering of untrusted HTML. Numeric unsupported question
+types remain discoverable metadata and keep the existing fail-closed execution
+boundary. These parser changes do not approve new endpoint calls or exam mutation.

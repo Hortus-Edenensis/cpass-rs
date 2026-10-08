@@ -18,7 +18,7 @@ from ..schema import (
     is_valid_answer,
     parse_question_type,
 )
-from ..utils import html_text, question_text, question_type_label
+from ..utils import html_text, question_text, question_type_label, saved_answer_value
 
 # 接口-单元作业答题提交
 API_WORK_COMMIT = "https://mooc1-api.chaoxing.com/work/addStudentWorkNew"
@@ -39,7 +39,10 @@ def parse_question(question_node: Tag) -> QuestionModel:
     type_nodes = question_node.find_all("input", id=re.compile(r"^answertype[0-9]+$"))
     if len(type_nodes) > 1:
         raise ValueError("题目 ID 不唯一")
-    id_node = question_node.select_one("input[name='questionId']")
+    id_nodes = question_node.select("input[name='questionId']")
+    if len(id_nodes) > 1:
+        raise ValueError("题目 ID 不唯一")
+    id_node = id_nodes[0] if id_nodes else None
     raw_id = (
         id_node.get("value")
         if id_node
@@ -50,7 +53,9 @@ def parse_question(question_node: Tag) -> QuestionModel:
     if not raw_id or not re.fullmatch(r"[0-9]+", raw_id) or int(raw_id) <= 0:
         raise ValueError("缺少可信题目 ID")
     question_id = int(raw_id)
-    type_node = question_node.select_one(f"input[id='answertype{question_id}']")
+    if type_nodes and int(type_nodes[0]["id"][10:]) != question_id:
+        raise ValueError("题目 ID 与题型字段不一致")
+    type_node = type_nodes[0] if type_nodes else None
     title_node = question_node.select_one("div.Py-m1-title")
     raw_type = type_node.get("value") if type_node else None
     type_title = html_text(question_type_label(title_node) or title_node)
@@ -62,8 +67,11 @@ def parse_question(question_node: Tag) -> QuestionModel:
     question_value = question_text(title_node)
     options = None
     answer = None
-    answer_node = question_node.select_one("input.answerInput")
-    saved_answer = answer_node.get("value", "") if answer_node else ""
+    saved_answer = saved_answer_value(
+        question_node,
+        f"input.answerInput, input[id='answer{question_id}'], input[id='answers{question_id}'], "
+        f"input[name='answer{question_id}'], input[name='answers{question_id}']",
+    )
     match question_type:
         case QuestionType.单选题 | QuestionType.多选题:
             options = {}

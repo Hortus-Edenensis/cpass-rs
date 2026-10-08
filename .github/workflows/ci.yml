@@ -7,6 +7,28 @@ on:
       - main
 
 jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install locked Python dependencies
+        run: |
+          python -m pip install poetry==1.8.5
+          poetry install --only main --no-root --no-interaction
+
+      - name: Offline Python regression tests
+        env:
+          CPASS_TEST_FULL_STARTUP: "1"
+        run: poetry run python -m unittest discover -s tests -v
+
+      - name: Python startup and OCR smoke test
+        run: poetry run python main.py --self-check
+
   rust:
     runs-on: ubuntu-latest
     steps:
@@ -22,16 +44,16 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Format
-        run: cargo fmt --check
+        run: cargo fmt --all --check
 
       - name: Lint
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --locked --workspace
 
       - name: Build
-        run: cargo build --workspace --release
+        run: cargo build --locked --workspace --release
 
   docker-smoke:
     runs-on: ubuntu-latest

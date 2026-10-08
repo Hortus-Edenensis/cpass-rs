@@ -1993,7 +1993,7 @@ fn plans_course_run_with_sqlite_searcher_fixture_transport() {
             "queue_index": 1,
             "work_answer_id": 99001,
             "total_questions": 3,
-            "selected_questions": 3
+            "selected_questions": 2
         })
     );
     assert_eq!(output["events"][9]["event"], "warning");
@@ -2001,7 +2001,7 @@ fn plans_course_run_with_sqlite_searcher_fixture_transport() {
         output["events"][9]["message"]
             .as_str()
             .expect("warning message")
-            .contains("prepared chapter-work candidate selections for 3/3 questions")
+            .contains("prepared chapter-work candidate selections for 2/3 questions")
     );
     assert_eq!(output["events"][10]["state"], "blocked");
     assert_eq!(
@@ -2043,7 +2043,7 @@ fn plans_course_run_with_http_searcher_fixture_transport() {
             "queue_index": 1,
             "work_answer_id": 99001,
             "total_questions": 3,
-            "selected_questions": 3
+            "selected_questions": 1
         })
     );
     assert_eq!(output["events"][9]["event"], "warning");
@@ -2054,7 +2054,7 @@ fn plans_course_run_with_http_searcher_fixture_transport() {
     );
     assert_eq!(
         output,
-        read_golden("run_course_plan_json_searcher_1001.json")
+        read_golden("run_course_plan_single_answer_searcher_1001.json")
     );
 }
 
@@ -2081,7 +2081,7 @@ fn plans_course_run_with_legacy_rest_api_searcher_fixture_transport() {
     assert_eq!(output["events"].as_array().map(Vec::len), Some(12));
     assert_eq!(
         output,
-        read_golden("run_course_plan_json_searcher_1001.json")
+        read_golden("run_course_plan_single_answer_searcher_1001.json")
     );
 }
 
@@ -2108,7 +2108,7 @@ fn plans_course_run_with_legacy_json_api_searcher_fixture_transport() {
     assert_eq!(output["events"].as_array().map(Vec::len), Some(12));
     assert_eq!(
         output,
-        read_golden("run_course_plan_json_searcher_1001.json")
+        read_golden("run_course_plan_single_answer_searcher_1001.json")
     );
 }
 
@@ -2136,7 +2136,7 @@ fn plans_course_run_with_openai_compatible_searcher_fixture_transport() {
     assert_eq!(output["events"].as_array().map(Vec::len), Some(12));
     assert_eq!(
         output,
-        read_golden("run_course_plan_json_searcher_1001.json")
+        read_golden("run_course_plan_single_answer_searcher_1001.json")
     );
 }
 
@@ -2164,8 +2164,61 @@ fn plans_course_run_with_legacy_openai_searcher_fixture_transport() {
     assert_eq!(output["events"].as_array().map(Vec::len), Some(12));
     assert_eq!(
         output,
-        read_golden("run_course_plan_json_searcher_1001.json")
+        read_golden("run_course_plan_single_answer_searcher_1001.json")
     );
+}
+
+#[test]
+fn deepseek_thinking_replay_only_resolves_complete_final_answers() {
+    let (temp, config_path) = bootstrap_workspace_with_openai_searcher("openai-compatible");
+    let config = fs::read_to_string(&config_path)
+        .expect("config")
+        .replace("https://api.example.com/v1", "https://api.deepseek.com/v1")
+        .replace("gpt-compatible", "deepseek-v4.1-flash");
+    fs::write(&config_path, format!("{config}    thinking: {{type: enabled}}\n    reasoning_effort: high\n    max_tokens: 8192\n    response_format: {{type: json_object}}\n")).expect("DeepSeek config");
+    for (content, finish_reason, selected) in [
+        (serde_json::json!(r#"{"answer":"B"}"#), "stop", 1),
+        (
+            serde_json::json!(r#"{"answers":["语义内容","名词"]}"#),
+            "stop",
+            1,
+        ),
+        (serde_json::json!(r#"{"answer":false}"#), "stop", 1),
+        (serde_json::Value::Null, "stop", 0),
+        (serde_json::json!("B"), "length", 0),
+        (serde_json::json!("<think>B"), "stop", 0),
+    ] {
+        fs::write(
+            temp.path().join("openai_searcher_response.json"),
+            serde_json::json!({
+                "choices": [{"finish_reason": finish_reason, "message": {
+                    "reasoning_content": "A", "content": content,
+                }}],
+            })
+            .to_string(),
+        )
+        .expect("reasoning replay");
+        let assert = Command::cargo_bin("cpass")
+            .expect("binary")
+            .env("CPASS_OPENAI_API_KEY", "sk-offline-deepseek")
+            .args([
+                "--json",
+                "--config",
+                config_path.to_str().expect("config path"),
+                "--fixture-dir",
+                fixture_root().to_str().expect("fixtures"),
+                "run",
+                "--course-id",
+                "1001",
+            ])
+            .assert()
+            .success();
+        let output: serde_json::Value =
+            serde_json::from_slice(&assert.get_output().stdout).expect("JSON output");
+        assert_eq!(output["events"][8]["selected_questions"], selected);
+        assert_eq!(output["events"][10]["state"], "blocked");
+        assert!(!temp.path().join("export").exists());
+    }
 }
 
 #[test]

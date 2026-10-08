@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use aes::Aes128;
@@ -1157,8 +1157,6 @@ pub fn parse_exam_preview_questions(html: &str) -> Result<Vec<ExamQuestionSummar
         .map_err(|err| CpassError::UnexpectedResponse(format!("invalid selector: {err}")))?;
     let question_id_selector = Selector::parse("input[name='questionId']")
         .map_err(|err| CpassError::UnexpectedResponse(format!("invalid selector: {err}")))?;
-    let question_type_selector = Selector::parse("input[name^='type']")
-        .map_err(|err| CpassError::UnexpectedResponse(format!("invalid selector: {err}")))?;
     let title_selector = Selector::parse("div.tit")
         .map_err(|err| CpassError::UnexpectedResponse(format!("invalid selector: {err}")))?;
     let title_header_selector = Selector::parse("h3")
@@ -1173,15 +1171,23 @@ pub fn parse_exam_preview_questions(html: &str) -> Result<Vec<ExamQuestionSummar
         .map_err(|err| CpassError::UnexpectedResponse(format!("invalid selector: {err}")))?;
 
     let mut questions = Vec::new();
+    let mut question_ids = BTreeSet::new();
     for (question_index, question_node) in document.select(&question_selector).enumerate() {
-        let question_id = question_node
-            .select(&question_id_selector)
-            .next()
-            .and_then(|node| node.value().attr("value"))
-            .and_then(|value| value.parse().ok())
-            .ok_or_else(|| {
-                CpassError::UnexpectedResponse("missing preview question id".to_owned())
-            })?;
+        let question_id = parse_question_id(
+            question_node
+                .select(&question_id_selector)
+                .next()
+                .and_then(|node| node.value().attr("value")),
+        )?;
+        if !question_ids.insert(question_id) {
+            return Err(CpassError::UnexpectedResponse(format!(
+                "duplicate preview question id: {question_id}"
+            )));
+        }
+        let question_type_selector = Selector::parse(&format!("input[name='type{question_id}']"))
+            .map_err(|err| {
+            CpassError::UnexpectedResponse(format!("invalid selector: {err}"))
+        })?;
         let question_type = question_node
             .select(&question_type_selector)
             .next()
@@ -1206,7 +1212,7 @@ pub fn parse_exam_preview_questions(html: &str) -> Result<Vec<ExamQuestionSummar
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| default_question_type_label(question_type))
             .to_owned();
-        let prompt = parse_preview_prompt(title_node, header_text.as_deref());
+        let prompt = parse_question_prompt(title_node, true)?;
         let options = question_node
             .select(&option_selector)
             .map(|option_node| {
@@ -1218,8 +1224,8 @@ pub fn parse_exam_preview_questions(html: &str) -> Result<Vec<ExamQuestionSummar
                 let value = option_node
                     .select(&option_value_selector)
                     .next()
-                    .map(normalized_node_text)
-                    .unwrap_or_else(|| normalized_node_text(option_node));
+                    .map(question_node_text)
+                    .unwrap_or_else(|| question_node_text(option_node));
                 let value = strip_option_key_prefix(&value, &key);
                 let rich_content = option_node
                     .select(&option_value_selector)
@@ -1232,6 +1238,7 @@ pub fn parse_exam_preview_questions(html: &str) -> Result<Vec<ExamQuestionSummar
                 }
             })
             .collect::<Vec<_>>();
+        validate_question_options(&options)?;
         let blanks = question_node
             .select(&blank_selector)
             .map(normalized_node_text)
@@ -1551,6 +1558,22 @@ pub fn parse_chapter_work_form(html: &str) -> Result<ChapterWorkFormSnapshot> {
         })
         .collect::<Result<Vec<_>>>()?;
 
+    if questions.len() != total_question_num {
+        return Err(CpassError::UnexpectedResponse(format!(
+            "chapter work question count mismatch: declared {total_question_num}, parsed {}",
+            questions.len()
+        )));
+    }
+    let mut question_ids = BTreeSet::new();
+    for question in &questions {
+        if !question_ids.insert(question.question_id) {
+            return Err(CpassError::UnexpectedResponse(format!(
+                "duplicate chapter work question id: {}",
+                question.question_id
+            )));
+        }
+    }
+
     Ok(ChapterWorkFormSnapshot {
         title,
         work_answer_id,
@@ -1589,17 +1612,12 @@ fn parse_chapter_work_question(
         .ok_or_else(|| {
             CpassError::UnexpectedResponse("missing chapter work question type".to_owned())
         })?;
-    let question_id = answer_type
-        .value()
-        .attr("id")
-        .and_then(|value| value.strip_prefix("answertype"))
-        .ok_or_else(|| {
-            CpassError::UnexpectedResponse("missing chapter work question id".to_owned())
-        })?
-        .parse::<u64>()
-        .map_err(|err| {
-            CpassError::UnexpectedResponse(format!("invalid chapter work question id: {err}"))
-        })?;
+    let question_id = parse_question_id(
+        answer_type
+            .value()
+            .attr("id")
+            .and_then(|value| value.strip_prefix("answertype")),
+    )?;
     let question_type = answer_type
         .value()
         .attr("value")
@@ -1616,7 +1634,7 @@ fn parse_chapter_work_question(
         .ok_or_else(|| {
             CpassError::UnexpectedResponse("missing chapter work question title".to_owned())
         })?;
-    let prompt = parse_chapter_work_prompt(title_node);
+    let prompt = parse_question_prompt(title_node, false)?;
     let question_type_label = default_question_type_label(question_type).to_owned();
 
     let options = if matches!(question_type, 0 | 1) {
@@ -1635,8 +1653,8 @@ fn parse_chapter_work_question(
                 let value = option_node
                     .select(&option_value_selector)
                     .next()
-                    .map(normalized_node_text)
-                    .unwrap_or_else(|| normalized_node_text(option_node));
+                    .map(question_node_text)
+                    .unwrap_or_else(|| question_node_text(option_node));
                 let value = strip_option_key_prefix(&value, &key);
                 let rich_content = option_node
                     .select(&option_value_selector)
@@ -1652,6 +1670,7 @@ fn parse_chapter_work_question(
     } else {
         Vec::new()
     };
+    validate_question_options(&options)?;
     let blanks = if question_type == 2 {
         question_node
             .select(&blank_selector)
@@ -1844,27 +1863,129 @@ fn strip_question_type_suffix(value: &str) -> &str {
     value.split('（').next().unwrap_or(value).trim()
 }
 
-fn parse_chapter_work_prompt(title_node: scraper::ElementRef<'_>) -> String {
-    let parts = title_node
-        .text()
-        .map(normalize_text)
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>();
-    let prompt = if parts.len() > 2 {
-        normalize_text(&parts[2..].join(" "))
-    } else {
-        parts.last().cloned().unwrap_or_default()
-    };
-    strip_question_number_prefix(&prompt)
+fn parse_question_id(raw: Option<&str>) -> Result<u64> {
+    raw.filter(|value| !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()))
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .ok_or_else(|| CpassError::UnexpectedResponse("invalid or missing question id".to_owned()))
 }
 
-fn parse_preview_prompt(title_node: scraper::ElementRef<'_>, header_text: Option<&str>) -> String {
-    let full_text = normalized_node_text(title_node);
-    let prompt = header_text
-        .and_then(|header| full_text.strip_prefix(header))
-        .unwrap_or(full_text.as_str())
-        .trim();
-    strip_question_number_prefix(prompt)
+fn validate_question_options(options: &[ExamQuestionOption]) -> Result<()> {
+    let mut keys = BTreeSet::new();
+    for option in options {
+        if option.key.len() != 1
+            || !option.key.bytes().all(|byte| byte.is_ascii_uppercase())
+            || !keys.insert(&option.key)
+        {
+            return Err(CpassError::UnexpectedResponse(format!(
+                "invalid or duplicate question option key: {}",
+                option.key
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn render_question_text(
+    node: scraper::ElementRef<'_>,
+    skip_heading: bool,
+    skip_label: Option<scraper::ElementRef<'_>>,
+    output: &mut String,
+) {
+    if Some(node) == skip_label {
+        output.push(' ');
+        return;
+    }
+    let name = node.value().name();
+    // Formula structure distinguishes answers that would otherwise collapse to identical text.
+    if name == "math" {
+        output.push_str(&node.html());
+        return;
+    }
+    if name == "script"
+        && node.value().attr("type").is_some_and(|kind| {
+            kind.split(';')
+                .next()
+                .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("math/tex"))
+        })
+    {
+        output.push_str(r"\(");
+        output.extend(node.text());
+        output.push_str(r"\)");
+        return;
+    }
+    if matches!(name, "script" | "style" | "input" | "button") || (skip_heading && name == "h3") {
+        return;
+    }
+    let block = matches!(name, "p" | "div" | "li" | "br");
+    if block {
+        output.push('\n');
+    }
+    match name {
+        "sup" => output.push_str("^{"),
+        "sub" => output.push_str("_{"),
+        _ => {}
+    }
+    for child in node.children() {
+        if let Some(element) = scraper::ElementRef::wrap(child) {
+            render_question_text(element, skip_heading, skip_label, output);
+        } else if let Some(text) = child.value().as_text() {
+            // Source indentation is whitespace, not a paragraph boundary.
+            for ch in text.chars() {
+                output.push(if ch.is_whitespace() { ' ' } else { ch });
+            }
+        }
+    }
+    if matches!(name, "sup" | "sub") {
+        output.push('}');
+    }
+    if block {
+        output.push('\n');
+    }
+}
+
+fn question_node_text(node: scraper::ElementRef<'_>) -> String {
+    let mut output = String::new();
+    render_question_text(node, false, None, &mut output);
+    normalize_question_lines(&output)
+}
+
+fn normalize_question_lines(value: &str) -> String {
+    value
+        .lines()
+        .map(normalize_text)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn parse_question_prompt(title_node: scraper::ElementRef<'_>, preview: bool) -> Result<String> {
+    let labels = Selector::parse("span, strong, b")
+        .map_err(|err| CpassError::UnexpectedResponse(format!("invalid selector: {err}")))?;
+    let full_text = title_node.text().collect::<String>();
+    let skip_label = (!preview)
+        .then(|| {
+            title_node.select(&labels).find(|node| {
+                let raw = node.text().collect::<String>();
+                let label = normalize_text(&raw);
+                let label = label.trim_matches(['（', '）', '(', ')']);
+                let label = label.split(['，', ',']).next().unwrap_or(label).trim();
+                (0..=21).any(|kind| default_question_type_label(kind) == label)
+                    && full_text.split_once(&raw).is_some_and(|(prefix, _)| {
+                        strip_question_number_prefix(&normalize_text(prefix)).is_empty()
+                    })
+            })
+        })
+        .flatten();
+    let mut output = String::new();
+    render_question_text(title_node, preview, skip_label, &mut output);
+    let prompt = strip_question_number_prefix(&normalize_question_lines(&output));
+    if prompt.is_empty() {
+        return Err(CpassError::UnexpectedResponse(
+            "missing question prompt".to_owned(),
+        ));
+    }
+    Ok(prompt)
 }
 
 fn strip_question_number_prefix(value: &str) -> String {
@@ -1877,7 +1998,12 @@ fn strip_question_number_prefix(value: &str) -> String {
             seen_digit = true;
             continue;
         }
-        if seen_digit && (ch == '.' || ch == '、') {
+        if seen_digit && matches!(ch, '.' | '．' | '、') {
+            if ch == '.'
+                && trimmed[index + ch.len_utf8()..].starts_with(|next: char| next.is_ascii_digit())
+            {
+                break;
+            }
             split_at = Some(index + ch.len_utf8());
             break;
         }
@@ -2498,6 +2624,117 @@ mod tests {
         assert_eq!(questions[3].question_type_label, "判断题");
         assert_eq!(questions[3].prompt, "现代汉语共同语就是普通话。");
         assert!(questions[3].options.is_empty());
+    }
+
+    #[test]
+    fn preview_types_use_the_exact_question_id_and_preserve_unknown_types() {
+        let fixture = include_str!("../../../../fixtures/legacy/exam_preview_555001.html");
+        let fixture = fixture.replace(
+            "<input name=\"type700001\" value=\"0\" />",
+            "<input name=\"typeName700001\" value=\"0\" /><input name=\"type700001\" value=\"999\" />",
+        );
+        let questions = parse_exam_preview_questions(&fixture).expect("valid preview inventory");
+        assert_eq!(questions[0].question_type, 999);
+        assert_eq!(questions[0].question_kind, "unknown");
+    }
+
+    #[test]
+    fn question_inventories_reject_invalid_ids_options_counts_and_empty_prompts() {
+        let preview = include_str!("../../../../fixtures/legacy/exam_preview_555001.html");
+        for (old, new) in [
+            ("700001", "0"),
+            ("700001", "+1"),
+            ("700002", "700001"),
+            ("name=\"B\"", "name=\"A\""),
+            ("name=\"B\"", "name=\"?\""),
+            ("普通话以哪种方言为基础方言？", ""),
+        ] {
+            assert!(
+                parse_exam_preview_questions(&preview.replace(old, new)).is_err(),
+                "{old} -> {new}"
+            );
+        }
+        let work = include_str!("../../../../fixtures/legacy/chapter_work_11_work_001.html");
+        for (old, new) in [
+            ("700101", "0"),
+            ("700101", "+1"),
+            ("700102", "700101"),
+            ("id-param=\"B\"", "id-param=\"A\""),
+            ("id-param=\"B\"", "id-param=\"?\""),
+            (
+                "id=\"totalQuestionNum\" value=\"3\"",
+                "id=\"totalQuestionNum\" value=\"2\"",
+            ),
+            ("普通话以哪种方言为基础方言？", ""),
+        ] {
+            assert!(
+                parse_chapter_work_form(&work.replace(old, new)).is_err(),
+                "{old} -> {new}"
+            );
+        }
+    }
+
+    #[test]
+    fn preview_and_work_preserve_inline_text_and_formula_structure() {
+        let preview = include_str!("../../../../fixtures/legacy/exam_preview_555001.html");
+        let work = include_str!("../../../../fixtures/legacy/chapter_work_11_work_001.html");
+        for (html, expected) in [
+            (
+                "题<span>目</span><p>后<strong>段</strong></p>",
+                "题目\n后段",
+            ),
+            ("x<sup>2</sup>+x<sub>i<sup>2</sup></sub>", "x^{2}+x_{i^{2}}"),
+            (
+                "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>",
+                "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>",
+            ),
+            (
+                r#"<script type="math/tex; mode=display">\frac{a}{b}</script>"#,
+                r"\(\frac{a}{b}\)",
+            ),
+            (
+                "题干<script>untrusted()</script><script type='math/tex-not'>hidden</script>",
+                "题干",
+            ),
+            ("3.14 + x", "3.14 + x"),
+            ("<span>New</span>\n<span>York</span>", "New York"),
+        ] {
+            let preview = preview
+                .replace("普通话以哪种方言为基础方言？", &format!(" {html}"))
+                .replace("北方方言", html);
+            let work = work
+                .replace("<p>普通话以哪种方言为基础方言？</p>", html)
+                .replace("北方方言", html);
+            let questions =
+                parse_exam_preview_questions(&preview).expect("valid preview inventory");
+            let snapshot = parse_chapter_work_form(&work).expect("valid chapter work inventory");
+            assert_eq!(questions[0].prompt, expected);
+            assert_eq!(snapshot.questions[0].prompt, expected);
+            assert_eq!(questions[0].options[1].value, expected);
+            assert_eq!(snapshot.questions[0].options[1].value, expected);
+        }
+        let inline = work.replace(
+            "<span>1.</span>\n        <span>单选题</span>\n        <p>普通话以哪种方言为基础方言？</p>",
+            "1.<span>（单选题，5.0分）</span>第一<span>行</span><br>第二行<p>第三行</p>",
+        );
+        assert_eq!(
+            parse_chapter_work_form(&inline)
+                .expect("valid inline chapter work")
+                .questions[0]
+                .prompt,
+            "第一行\n第二行\n第三行"
+        );
+        let bare = work.replace(
+            "<span>1.</span>\n        <span>单选题</span>\n        <p>普通话以哪种方言为基础方言？</p>",
+            "题<span>目</span><p>后段</p>",
+        );
+        assert_eq!(
+            parse_chapter_work_form(&bare)
+                .expect("valid chapter work without heading")
+                .questions[0]
+                .prompt,
+            "题目\n后段"
+        );
     }
 
     #[test]

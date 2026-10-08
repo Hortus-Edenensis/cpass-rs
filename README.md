@@ -1,15 +1,58 @@
 # cpass-rs
 
-`cpass-rs` is the Rust-first reboot of the old CxKitty automation project.
+`cpass-rs` maintains the Python CxKitty client and a native Rust workspace.
 
-The supported runtime in this repository is the Rust CLI under [`crates/`](./crates). The Python
-tree remains only as a legacy reference for fixture capture, protocol comparison, and reversible
-handoff notes that should feed back into Rust-owned artifacts.
+The date-based Python release includes strict question parsing, conservative answer matching,
+and DeepSeek V4.1 Flash thinking support. Download the Python source, Windows executable,
+or native macOS application from [GitHub Releases](https://github.com/Hortus-Edenensis/cpass-rs/releases).
 
-## Status
+## Python runtime
 
-- Supported runtime: Rust CLI in [`crates/cpass-cli`](./crates/cpass-cli)
-- Legacy reference: Python implementation in [`cxapi/`](./cxapi), [`resolver/`](./resolver), and top-level `*.py`
+Use Python 3.10 or 3.11 and Poetry 1.8:
+
+```bash
+python -m pip install poetry==1.8.5
+poetry install --no-root
+poetry run python main.py --self-check
+poetry run python main.py
+```
+
+Edit `config.yml` before using the client. `--self-check` checks the installed parser, searcher,
+and OCR dependencies offline and exits before login. Windows packages include `CxKitty.exe`;
+macOS packages include `CxKitty.app`, which opens the interactive client in Terminal and stores
+configuration/session data in `~/Library/Application Support/CxKitty`.
+
+The four supported automatic question kinds require complete, unique answers. Existing valid
+answers, including boolean `False`, are preserved. Missing/duplicate question IDs, parse errors,
+partial answers, conflicts, or invalid save receipts block final submission.
+
+### DeepSeek V4.1 Flash
+
+Set `CPASS_OPENAI_API_KEY` in your environment and add this entry to `searchers` in `config.yml`:
+
+```yaml
+searchers:
+  - type: OpenAISearcher
+    base_url: "https://api.deepseek.com/v1"
+    model: "deepseek-v4.1-flash"
+    thinking: {type: enabled}
+    reasoning_effort: high
+    max_tokens: 8192
+    response_format: {type: json_object}
+    system_prompt: "只返回最终答案的 JSON 对象，不要解释。"
+    prompt: "题型：{type}\n题目：{value}\n{options}"
+```
+
+The official endpoint maps `deepseek-v4.1-flash` to the current official API ID `deepseek-flash`;
+gateway model names pass through unchanged. Only final `message.content` is matched;
+`reasoning_content` is never used as an answer and truncated responses remain unresolved.
+See [Python searcher configuration](./docs/python-searchers.md) and the
+[official model update](https://api-docs.deepseek.com/updates/).
+
+## Rust workspace status
+
+- Native runtime: Rust CLI in [`crates/cpass-cli`](./crates/cpass-cli)
+- Python runtime: implementation in [`cxapi/`](./cxapi), [`resolver/`](./resolver), and top-level `*.py`
 - Current milestone: Phase 4 hardening and legacy-boundary follow-up
 - Current runnable commands:
   - `cpass` now launches the top-level interactive orchestrator when invoked without a subcommand:
@@ -34,9 +77,9 @@ handoff notes that should feed back into Rust-owned artifacts.
 ## Repository Layout
 
 - [`crates/cpass-core`](./crates/cpass-core): config, session, transport, parser, runners, and shared runtime contracts
-- [`crates/cpass-cli`](./crates/cpass-cli): supported Rust command-line runtime and output adapters
+- [`crates/cpass-cli`](./crates/cpass-cli): native Rust command-line runtime and output adapters
 - [`fixtures/legacy`](./fixtures/legacy): legacy-derived fixtures for parser and compatibility tests
-- [`pyproject.toml`](./pyproject.toml), [`poetry.lock`](./poetry.lock), and [`main.py`](./main.py): legacy-only Python lab bench metadata / entrypoint kept for fixture capture and protocol comparison, not as a supported runtime
+- [`pyproject.toml`](./pyproject.toml), [`poetry.lock`](./poetry.lock), and [`main.py`](./main.py): Python runtime, locked dependencies, and entrypoint
 - [`docs/read-only-boundary.md`](./docs/read-only-boundary.md): allowlist and denylist for Phase 2 safe read-only endpoints
 - [`docs/course-runner.md`](./docs/course-runner.md): current `CourseRunner` scope, plan contract, and unsupported execution behavior
 - [`docs/task-executor-registry.md`](./docs/task-executor-registry.md): current executor registry scope, fail-closed queue-entry selection, and what still remains out of scope
@@ -44,11 +87,17 @@ handoff notes that should feed back into Rust-owned artifacts.
 - [`docs/searcher-pipeline.md`](./docs/searcher-pipeline.md): shared Phase 3 answer-query pipeline plus the first local JSON and SQLite searcher backends
 - [`docs/automation-profiles.md`](./docs/automation-profiles.md): profile-driven automation recipes plus the remaining interactive boundaries for login, run, and export flows
 - [`docs/notification-pipeline.md`](./docs/notification-pipeline.md): CLI-owned notification summary and fan-out boundary for future Gotify/MQTT delivery
-- [`docs/legacy-reference.md`](./docs/legacy-reference.md): rules for keeping the Python code as a reference instead of the mainline implementation
+- [`docs/legacy-reference.md`](./docs/legacy-reference.md): Python maintenance and Rust protocol comparison boundaries
+
+## Releases
+
+Date tags such as `v2026.10.08` publish the Python source archive, Windows x86_64 executable,
+and macOS arm64 / x86_64 application archives with SHA-256 checksums. Each frozen package
+passes an offline startup check before publication.
 
 ## Build
 
-The Rust CLI and its Docker image are the supported runtime artifacts.
+The Rust CLI and its Docker image remain available for native workspace development.
 
 ### Local
 
@@ -106,8 +155,13 @@ for `config validate`, `doctor`, `login`, `exam export`, `exam preview export`, 
   fail-closed config validation, request construction, and JSON answer-path extraction documented
   in [`docs/searcher-pipeline.md`](./docs/searcher-pipeline.md)
 - `openai-compatible` / legacy `OpenAISearcher`: chat-completions-style answer APIs with
-  validated `base_url` / `model` / `api_key`, prompt templating, optional fixture replay, and
-  the same fail-closed chapter-work boundary
+  validated `base_url` / `model` / `api_key`, DeepSeek V4.1 Flash thinking controls, prompt
+  templating, optional fixture replay, and the same fail-closed chapter-work boundary
+
+Candidate selection requires a complete, unambiguous answer for the four classic question
+types and agreement among valid provider results. Invalid or conflicting answers remain unresolved.
+Thinking traces are separate from final answers; truncated model responses cannot resolve a question.
+See [`docs/searcher-pipeline.md`](./docs/searcher-pipeline.md) for DeepSeek configuration.
 
 All four currently wired backends stay inside the same Phase 3 search-only boundary:
 `cpass run` can prepare chapter-work answer candidates from them, but it still stops fail-closed

@@ -175,7 +175,7 @@ pub struct AnswerCandidateSelection {
 impl AnswerCandidateSelection {
     #[must_use]
     pub fn new(query: AnswerQuery, candidates: Vec<AnswerCandidate>) -> Self {
-        let selected_candidate = candidates.first().cloned();
+        let selected_candidate = crate::answer::selected_candidate(&query, &candidates);
         Self {
             query,
             candidates,
@@ -596,12 +596,20 @@ impl HttpSearcherProvider {
         })
     }
 
-    fn extract_answers(&self, response: &serde_json::Value) -> Vec<String> {
+    fn extract_answers(&self, response: &serde_json::Value, query: &AnswerQuery) -> Vec<String> {
         let Some(value) = resolve_http_searcher_response_value(response, &self.response_path)
         else {
             return Vec::new();
         };
 
+        if value.is_array()
+            && matches!(
+                query.question_kind,
+                AnswerQuestionKind::MultipleChoice | AnswerQuestionKind::FillBlank
+            )
+        {
+            return vec![value.to_string()];
+        }
         let mut answers = Vec::new();
         collect_http_searcher_answer_strings(value, &mut answers);
         answers
@@ -614,7 +622,7 @@ impl SearcherProvider for HttpSearcherProvider {
         let request = self.request_template.build_request(query);
         let response = self.backend.execute(request, &self.request_headers).await?;
         Ok(self
-            .extract_answers(&response)
+            .extract_answers(&response, query)
             .into_iter()
             .map(|answer| AnswerCandidate {
                 provider: self.provider_label.clone(),
@@ -646,6 +654,14 @@ pub struct OpenAiCompatibleMessage {
 pub struct OpenAiCompatibleRequest {
     pub model: String,
     pub messages: Vec<OpenAiCompatibleMessage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -656,6 +672,8 @@ pub struct OpenAiCompatibleResponse {
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct OpenAiCompatibleResponseChoice {
     pub message: OpenAiCompatibleResponseMessage,
+    #[serde(default)]
+    pub finish_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -669,9 +687,20 @@ impl OpenAiCompatibleResponse {
     pub fn first_message_content(&self) -> Option<&str> {
         self.choices
             .iter()
-            .find_map(|choice| choice.message.content.as_deref())
-            .map(str::trim)
-            .filter(|content| !content.is_empty())
+            .filter(|choice| {
+                choice
+                    .finish_reason
+                    .as_deref()
+                    .is_none_or(|reason| reason == "stop")
+            })
+            .find_map(|choice| {
+                choice
+                    .message
+                    .content
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|content| !content.is_empty())
+            })
     }
 }
 
@@ -682,6 +711,10 @@ pub struct OpenAiCompatibleRequestTemplate {
     model: String,
     system_prompt: String,
     prompt_template: String,
+    thinking: Option<serde_json::Value>,
+    reasoning_effort: Option<String>,
+    max_tokens: Option<u64>,
+    response_format: Option<serde_json::Value>,
 }
 
 impl std::fmt::Debug for OpenAiCompatibleRequestTemplate {
@@ -693,6 +726,10 @@ impl std::fmt::Debug for OpenAiCompatibleRequestTemplate {
             .field("model", &self.model)
             .field("system_prompt", &self.system_prompt)
             .field("prompt_template", &self.prompt_template)
+            .field("thinking", &self.thinking)
+            .field("reasoning_effort", &self.reasoning_effort)
+            .field("max_tokens", &self.max_tokens)
+            .field("response_format", &self.response_format)
             .finish()
     }
 }
@@ -704,9 +741,75 @@ impl OpenAiCompatibleRequestTemplate {
             &config.kind,
         )?;
         let api_key = required_searcher_string_field(config, "api_key")?;
-        let model = required_searcher_string_field(config, "model")?;
-        let system_prompt = optional_searcher_string_field(config, "system_prompt")?
+        let is_deepseek = Url::parse(&endpoint_url)?.host_str() == Some("api.deepseek.com");
+        let mut model = required_searcher_string_field(config, "model")?;
+        if is_deepseek && model == "deepseek-v4.1-flash" {
+            model = "deepseek-flash".to_owned();
+        }
+        let thinking =
+            optional_openai_compatible_type_field(config, "thinking", &["enabled", "disabled"])?;
+        let response_format = optional_openai_compatible_type_field(
+            config,
+            "response_format",
+            &["text", "json_object"],
+        )?;
+        let mut reasoning_effort = optional_searcher_string_field(config, "reasoning_effort")?;
+        if let Some(effort) = reasoning_effort.as_deref() {
+            if !matches!(
+                effort,
+                "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra"
+            ) {
+                return Err(CpassError::Config(format!(
+                    "searcher type '{}' field 'reasoning_effort' must be none, minimal, low, medium, high, xhigh, max, or ultra",
+                    config.kind
+                )));
+            }
+            if let Some(thinking) = &thinking {
+                let enabled = thinking["type"] == "enabled";
+                if enabled == (effort == "none") {
+                    return Err(CpassError::Config(format!(
+                        "searcher type '{}' fields 'thinking' and 'reasoning_effort' conflict",
+                        config.kind
+                    )));
+                }
+            }
+            if is_deepseek {
+                reasoning_effort = Some(
+                    match effort {
+                        "minimal" => "low",
+                        "medium" | "xhigh" => "high",
+                        "ultra" => "max",
+                        other => other,
+                    }
+                    .to_owned(),
+                );
+            }
+        }
+        let max_tokens = match config.values.get("max_tokens") {
+            None | Some(serde_json::Value::Null) => None,
+            Some(value) => Some(
+                value
+                    .as_u64()
+                    .filter(|tokens| *tokens > 0 && (!is_deepseek || *tokens <= 393_216))
+                    .ok_or_else(|| {
+                        CpassError::Config(format!(
+                            "searcher type '{}' field 'max_tokens' must be a positive integer{}",
+                            config.kind,
+                            if is_deepseek { " at most 393216" } else { "" }
+                        ))
+                    })?,
+            ),
+        };
+        let mut system_prompt = optional_searcher_string_field(config, "system_prompt")?
             .unwrap_or_else(|| DEFAULT_OPENAI_COMPATIBLE_SYSTEM_PROMPT.to_owned());
+        if response_format
+            .as_ref()
+            .is_some_and(|format| format["type"] == "json_object")
+        {
+            system_prompt.push_str(
+                "\n请输出 JSON 对象，例如 {\"answer\":\"A\"} 或 {\"answers\":[\"A\",\"C\"]}，只包含最终答案，不要解释。",
+            );
+        }
         let prompt_template = resolve_openai_compatible_prompt_template(config)?;
 
         Ok(Self {
@@ -715,6 +818,10 @@ impl OpenAiCompatibleRequestTemplate {
             model,
             system_prompt,
             prompt_template,
+            thinking,
+            reasoning_effort,
+            max_tokens,
+            response_format,
         })
     }
 
@@ -757,7 +864,35 @@ impl OpenAiCompatibleRequestTemplate {
                     content: render_openai_compatible_prompt(&self.prompt_template, query),
                 },
             ],
+            thinking: self.thinking.clone(),
+            reasoning_effort: self.reasoning_effort.clone(),
+            max_tokens: self.max_tokens,
+            response_format: self.response_format.clone(),
         }
+    }
+}
+
+fn optional_openai_compatible_type_field(
+    config: &SearcherConfig,
+    field: &str,
+    allowed: &[&str],
+) -> Result<Option<serde_json::Value>> {
+    match config.values.get(field) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(serde_json::Value::Object(value))
+            if value.len() == 1
+                && value
+                    .get("type")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|kind| allowed.contains(&kind)) =>
+        {
+            Ok(Some(serde_json::Value::Object(value.clone())))
+        }
+        Some(_) => Err(CpassError::Config(format!(
+            "searcher type '{}' field '{field}' must contain only 'type' with one of: {}",
+            config.kind,
+            allowed.join(", ")
+        ))),
     }
 }
 
@@ -1299,7 +1434,7 @@ impl JsonSearcherValue {
     fn into_answers(self) -> Vec<String> {
         match self {
             Self::Answer(answer) => vec![answer],
-            Self::Answers(answers) => answers,
+            Self::Answers(answers) => vec![serde_json::Value::from(answers).to_string()],
         }
     }
 }
@@ -2301,6 +2436,158 @@ mod tests {
         );
     }
 
+    fn openai_compatible_test_config(base_url: &str) -> SearcherConfig {
+        SearcherConfig {
+            kind: "openai-compatible".to_owned(),
+            values: BTreeMap::from([
+                ("base_url".to_owned(), serde_json::json!(base_url)),
+                ("model".to_owned(), serde_json::json!("deepseek-v4.1-flash")),
+                ("api_key".to_owned(), serde_json::json!("sk-test")),
+            ]),
+        }
+    }
+
+    #[test]
+    fn builds_deepseek_thinking_and_json_request() {
+        let mut config = openai_compatible_test_config("https://api.deepseek.com");
+        config.values.extend([
+            (
+                "thinking".to_owned(),
+                serde_json::json!({"type": "enabled"}),
+            ),
+            ("reasoning_effort".to_owned(), serde_json::json!("ultra")),
+            ("max_tokens".to_owned(), serde_json::json!(32768)),
+            (
+                "response_format".to_owned(),
+                serde_json::json!({"type": "json_object"}),
+            ),
+        ]);
+        let template = OpenAiCompatibleRequestTemplate::from_config(&config).expect("DeepSeek");
+        let request = serde_json::to_value(template.build_request(&sample_answer_query()))
+            .expect("request JSON");
+
+        assert_eq!(
+            template.endpoint_url(),
+            "https://api.deepseek.com/chat/completions"
+        );
+        assert_eq!(request["model"], "deepseek-flash");
+        assert_eq!(request["thinking"], serde_json::json!({"type": "enabled"}));
+        assert_eq!(request["reasoning_effort"], "max");
+        assert_eq!(request["max_tokens"], 32768);
+        assert_eq!(
+            request["response_format"],
+            serde_json::json!({"type": "json_object"})
+        );
+        assert!(
+            request["messages"][0]["content"]
+                .as_str()
+                .expect("system prompt")
+                .contains("{\"answer\":\"A\"}")
+        );
+        assert!(request.get("api_key").is_none());
+        assert!(!format!("{template:?}").contains("sk-test"));
+    }
+
+    #[test]
+    fn preserves_gateway_model_names_and_omits_unconfigured_options() {
+        for base_url in [
+            "https://gateway.example.com/v1",
+            "https://api.deepseek.com.gateway.example.com/v1",
+        ] {
+            let config = openai_compatible_test_config(base_url);
+            let template = OpenAiCompatibleRequestTemplate::from_config(&config).expect("gateway");
+            let request = serde_json::to_value(template.build_request(&sample_answer_query()))
+                .expect("request JSON");
+            assert_eq!(request["model"], "deepseek-v4.1-flash");
+            assert_eq!(request.as_object().expect("request object").len(), 2);
+        }
+
+        for (effort, mapped) in [
+            ("none", "none"),
+            ("minimal", "low"),
+            ("low", "low"),
+            ("medium", "high"),
+            ("high", "high"),
+            ("xhigh", "high"),
+            ("max", "max"),
+            ("ultra", "max"),
+        ] {
+            for (base_url, expected) in [
+                ("https://api.deepseek.com", mapped),
+                ("https://gateway.example.com/v1", effort),
+            ] {
+                let mut config = openai_compatible_test_config(base_url);
+                config
+                    .values
+                    .insert("reasoning_effort".to_owned(), serde_json::json!(effort));
+                let request = OpenAiCompatibleRequestTemplate::from_config(&config)
+                    .expect("reasoning effort")
+                    .build_request(&sample_answer_query());
+                assert_eq!(request.reasoning_effort.as_deref(), Some(expected));
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_openai_compatible_thinking_options() {
+        for (field, value) in [
+            ("thinking", serde_json::json!(true)),
+            ("thinking", serde_json::json!({"type": "automatic"})),
+            (
+                "thinking",
+                serde_json::json!({"type": "enabled", "budget_tokens": 100}),
+            ),
+            ("reasoning_effort", serde_json::json!(1)),
+            ("reasoning_effort", serde_json::json!("unknown")),
+            ("max_tokens", serde_json::json!(0)),
+            ("max_tokens", serde_json::json!(-1)),
+            ("max_tokens", serde_json::json!(1.5)),
+            ("max_tokens", serde_json::json!("32768")),
+            ("max_tokens", serde_json::json!(393217)),
+            ("response_format", serde_json::json!("json_object")),
+            (
+                "response_format",
+                serde_json::json!({"type": "json_schema"}),
+            ),
+        ] {
+            let mut config = openai_compatible_test_config("https://api.deepseek.com");
+            config.values.insert(field.to_owned(), value.clone());
+            let error = OpenAiCompatibleRequestTemplate::from_config(&config)
+                .expect_err("invalid option must fail closed");
+            assert!(
+                matches!(error, crate::error::CpassError::Config(_)),
+                "{field}: {value}"
+            );
+            assert!(error.to_string().contains(field), "{error}");
+        }
+
+        for (thinking, effort) in [("enabled", "none"), ("disabled", "high")] {
+            let mut config = openai_compatible_test_config("https://api.deepseek.com");
+            config.values.extend([
+                ("thinking".to_owned(), serde_json::json!({"type": thinking})),
+                ("reasoning_effort".to_owned(), serde_json::json!(effort)),
+            ]);
+            assert!(
+                OpenAiCompatibleRequestTemplate::from_config(&config)
+                    .expect_err("conflicting thinking controls")
+                    .to_string()
+                    .contains("conflict")
+            );
+        }
+
+        for (base_url, tokens) in [
+            ("https://api.deepseek.com", 1),
+            ("https://api.deepseek.com", 393216),
+            ("https://gateway.example.com/v1", 393217),
+        ] {
+            let mut config = openai_compatible_test_config(base_url);
+            config
+                .values
+                .insert("max_tokens".to_owned(), serde_json::json!(tokens));
+            assert!(OpenAiCompatibleRequestTemplate::from_config(&config).is_ok());
+        }
+    }
+
     #[test]
     fn builds_openai_compatible_request_template_with_defaults() {
         let config = SearcherConfig {
@@ -2340,6 +2627,10 @@ mod tests {
             request,
             OpenAiCompatibleRequest {
                 model: "gpt-4.1-mini".to_owned(),
+                thinking: None,
+                reasoning_effort: None,
+                max_tokens: None,
+                response_format: None,
                 messages: vec![
                     OpenAiCompatibleMessage {
                         role: OpenAiCompatibleMessageRole::System,
@@ -2454,6 +2745,46 @@ mod tests {
     }
 
     #[test]
+    fn openai_compatible_response_separates_reasoning_and_requires_complete_content() {
+        for finish_reason in [
+            "length",
+            "content_filter",
+            "tool_calls",
+            "insufficient_system_resource",
+            "aborted",
+            "unknown",
+        ] {
+            let response: OpenAiCompatibleResponse = serde_json::from_value(serde_json::json!({
+                "choices": [{"finish_reason": finish_reason, "message": {
+                    "reasoning_content": "B", "content": "A"
+                }}]
+            }))
+            .expect("response");
+            assert_eq!(response.first_message_content(), None, "{finish_reason}");
+        }
+        for content in [serde_json::Value::Null, serde_json::json!(" ")] {
+            let response: OpenAiCompatibleResponse = serde_json::from_value(serde_json::json!({
+                "choices": [{"finish_reason": "stop", "message": {
+                    "reasoning_content": "B", "content": content
+                }}]
+            }))
+            .expect("reasoning-only response");
+            assert_eq!(response.first_message_content(), None);
+        }
+
+        let response: OpenAiCompatibleResponse = serde_json::from_value(serde_json::json!({
+            "choices": [
+                {"message": {"content": " "}},
+                {"message": {"reasoning_content": "B", "content": null}},
+                {"finish_reason": "length", "message": {"content": "B"}},
+                {"finish_reason": "stop", "message": {"reasoning_content": "B", "content": " A "}}
+            ]
+        }))
+        .expect("complete answer response");
+        assert_eq!(response.first_message_content(), Some("A"));
+    }
+
+    #[test]
     fn rejects_invalid_openai_compatible_base_urls() {
         let config = SearcherConfig {
             kind: "openai-compatible".to_owned(),
@@ -2514,6 +2845,7 @@ mod tests {
         };
         let backend = RecordingOpenAiCompatibleBackend::new(OpenAiCompatibleResponse {
             choices: vec![OpenAiCompatibleResponseChoice {
+                finish_reason: None,
                 message: OpenAiCompatibleResponseMessage {
                     content: Some("  A#C  ".to_owned()),
                 },
@@ -2539,6 +2871,10 @@ mod tests {
             recorded.request,
             OpenAiCompatibleRequest {
                 model: "gpt-compatible".to_owned(),
+                thinking: None,
+                reasoning_effort: None,
+                max_tokens: None,
+                response_format: None,
                 messages: vec![
                     OpenAiCompatibleMessage {
                         role: OpenAiCompatibleMessageRole::System,
@@ -2567,6 +2903,7 @@ mod tests {
     fn openai_compatible_searcher_returns_no_candidates_for_empty_content() {
         let backend = RecordingOpenAiCompatibleBackend::new(OpenAiCompatibleResponse {
             choices: vec![OpenAiCompatibleResponseChoice {
+                finish_reason: None,
                 message: OpenAiCompatibleResponseMessage {
                     content: Some("   ".to_owned()),
                 },
@@ -2596,6 +2933,7 @@ mod tests {
 
         let answers = searcher.extract_answers(&OpenAiCompatibleResponse {
             choices: vec![OpenAiCompatibleResponseChoice {
+                finish_reason: None,
                 message: OpenAiCompatibleResponseMessage {
                     content: Some("   ".to_owned()),
                 },
@@ -2797,8 +3135,8 @@ mod tests {
         assert_eq!(selection_batch.work_answer_id, 99001);
         assert_eq!(selection_batch.total_question_num, 2);
         assert_eq!(selection_batch.len(), 2);
-        assert_eq!(selection_batch.selected_count(), 2);
-        assert_eq!(selection_batch.unresolved_count(), 0);
+        assert_eq!(selection_batch.selected_count(), 1);
+        assert_eq!(selection_batch.unresolved_count(), 1);
         assert_eq!(selection_batch.selections[0].query.question_id, 700401);
         assert_eq!(
             selection_batch.selections[0]
@@ -2809,14 +3147,7 @@ mod tests {
             "json:700401"
         );
         assert_eq!(selection_batch.selections[0].candidates.len(), 2);
-        assert_eq!(
-            selection_batch.selections[1]
-                .selected_candidate
-                .as_ref()
-                .expect("preferred candidate")
-                .answer,
-            "A"
-        );
+        assert!(selection_batch.selections[1].selected_candidate.is_none());
     }
 
     #[tokio::test]
@@ -2903,7 +3234,7 @@ mod tests {
                 .iter()
                 .map(|candidate| candidate.answer.as_str())
                 .collect::<Vec<_>>(),
-            vec!["语义内容", "名词"]
+            vec![r#"["语义内容","名词"]"#]
         );
     }
 
@@ -3855,6 +4186,57 @@ mod tests {
         );
     }
 
+    #[test]
+    fn preserves_multipart_http_answers_before_strict_selection() {
+        let config = SearcherConfig {
+            kind: "http".to_owned(),
+            values: BTreeMap::from([
+                (
+                    "url".to_owned(),
+                    serde_json::json!("https://answers.example/search"),
+                ),
+                ("a_field".to_owned(), serde_json::json!("$.data")),
+            ]),
+        };
+        let provider = HttpSearcherProvider::from_config(&config).expect("HTTP provider");
+        let mut query = sample_answer_query();
+        for (kind, question_type, values, expected) in [
+            (
+                AnswerQuestionKind::MultipleChoice,
+                1,
+                serde_json::json!(["A", "B"]),
+                "AB",
+            ),
+            (
+                AnswerQuestionKind::FillBlank,
+                2,
+                serde_json::json!(["甲", "乙"]),
+                r#"["甲","乙"]"#,
+            ),
+        ] {
+            query.question_kind = kind;
+            query.question_type = question_type;
+            query.blanks = vec!["第一空".into(), "第二空".into()];
+            let answers = provider.extract_answers(&serde_json::json!({"data": values}), &query);
+            assert_eq!(answers.len(), 1);
+            let selection = super::AnswerCandidateSelection::new(
+                query.clone(),
+                vec![AnswerCandidate {
+                    provider: "http".into(),
+                    confidence: None,
+                    answer: answers[0].clone(),
+                }],
+            );
+            assert_eq!(
+                selection
+                    .selected_candidate
+                    .expect("complete answer")
+                    .answer,
+                expected
+            );
+        }
+    }
+
     #[tokio::test]
     async fn http_searcher_issues_json_posts_and_extracts_nested_scalar_answers() {
         let backend = RecordingHttpSearcherBackend::new(serde_json::json!({
@@ -3979,11 +4361,10 @@ mod tests {
         )
         .expect("http searcher");
 
-        let answers = searcher.extract_answers(&serde_json::json!({
-            "meta": {
-                "ok": true
-            }
-        }));
+        let answers = searcher.extract_answers(
+            &serde_json::json!({"meta": {"ok": true}}),
+            &sample_answer_query(),
+        );
 
         assert!(answers.is_empty());
     }

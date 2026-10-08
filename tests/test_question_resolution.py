@@ -311,6 +311,123 @@ class RegressionTests(unittest.TestCase):
                 self.assertEqual(blanks.answer, ["已有", ""])
                 self.assertEqual(len(blanks.options), 2)
 
+    def test_formula_structure_survives_question_and_option_parsing(self):
+        fraction = "<math><mfrac><mi>a</mi><mi>b</mi></mfrac></math>"
+        product = "<math><mrow><mi>a</mi><mi>b</mi></mrow></math>"
+        tex = r'<script type="math/tex; mode=display">\frac{a}{b}</script>'
+        cases = (
+            ("x<sup>2</sup>+x<sub>i<sup>2</sup></sub>", "x<sup>2</sup>", "x2", "x^{2}+x_{i^{2}}"),
+            (fraction, fraction, product, fraction),
+            (tex, tex, r'<script type="math/tex">\frac{b}{a}</script>', r"\(\frac{a}{b}\)"),
+        )
+        for parser, factory in ((work.parse_question, work_html), (exam.parse_question, exam_html)):
+            for body, first, second, expected in cases:
+                with self.subTest(parser=parser.__module__, body=body):
+                    node = BeautifulSoup(factory(), "lxml").div
+                    targets = (
+                        (node.select_one("div.Py-m1-title, div.tit"), body),
+                        (
+                            node.select_one(
+                                "li.more-choose-item .choose-desc, div.answerList[name='A']"
+                            ),
+                            first,
+                        ),
+                        (
+                            node.select_one(
+                                "li.more-choose-item:nth-child(2) .choose-desc, div.answerList[name='B']"
+                            ),
+                            second,
+                        ),
+                    )
+                    for target, html in targets:
+                        target.clear()
+                        for child in list(BeautifulSoup(html, "html.parser").contents):
+                            target.append(child)
+                    q = parser(node)
+                    self.assertEqual(q.value, expected)
+                    self.assertNotEqual(q.options["A"], q.options["B"])
+                    self.assertEqual(resolver.normalize_answer(q, q.options["A"]), "A")
+                    self.assertEqual(resolver.normalize_answer(q, q.options["B"]), "B")
+                    if body != fraction:
+                        self.assertIsNone(resolver.normalize_answer(q, "ab"))
+
+    def test_inline_whitespace_separates_words_in_prompts_and_options(self):
+        for parser, factory in ((work.parse_question, work_html), (exam.parse_question, exam_html)):
+            with self.subTest(parser=parser.__module__):
+                node = BeautifulSoup(factory(), "lxml").div
+                for selector in (
+                    "div.Py-m1-title, div.tit",
+                    "li.more-choose-item .choose-desc, div.answerList[name='A']",
+                ):
+                    target = node.select_one(selector)
+                    target.clear()
+                    for child in list(
+                        BeautifulSoup("<span>New</span>\n<span>York</span>", "html.parser").contents
+                    ):
+                        target.append(child)
+                q = parser(node)
+                self.assertEqual(q.value, "New York")
+                self.assertEqual(q.options["A"], "New York")
+                self.assertEqual(resolver.normalize_answer(q, "New York"), "A")
+                self.assertIsNone(resolver.normalize_answer(q, "NewYork"))
+
+    def test_exam_type_and_saved_answer_fields_use_exact_id_or_name(self):
+        for raw, expected in (
+            ("0", QuestionType.单选题),
+            ("1", QuestionType.多选题),
+            ("2", QuestionType.填空题),
+            ("3", QuestionType.判断题),
+        ):
+            for identity in ("name", "id"):
+                with self.subTest(raw=raw, identity=identity):
+                    html = (
+                        exam_html(type_value=raw, answer="false")
+                        .replace(
+                            '<input name="type42"',
+                            f'<input name="type99" value="3"><input {identity}="type42"',
+                        )
+                        .replace('<input id="answer42"', '<input name="answer42"')
+                    )
+                    q = parse(exam.parse_question, html)
+                    self.assertEqual(q.type, expected)
+                    if raw == "3":
+                        self.assertIs(q.answer, False)
+        html = exam_html().replace(
+            '<input name="type42"', '<input id="type42" value="1"><input name="type42"'
+        )
+        with self.assertRaises(ValueError):
+            parse(exam.parse_question, html)
+
+    def test_ambiguous_or_mismatched_question_identity_is_rejected(self):
+        for parser, factory in ((work.parse_question, work_html), (exam.parse_question, exam_html)):
+            with self.subTest(parser=parser.__module__):
+                node = BeautifulSoup(factory(), "lxml").div
+                for qid in ("42", "43"):
+                    node.append(
+                        BeautifulSoup(f'<input name="questionId" value="{qid}">', "html.parser")
+                    )
+                with self.assertRaises(ValueError):
+                    parser(node)
+        node = BeautifulSoup(work_html(), "lxml").div
+        node.append(BeautifulSoup('<input name="questionId" value="43">', "html.parser"))
+        with self.assertRaises(ValueError):
+            work.parse_question(node)
+
+    def test_saved_answer_collisions_are_rejected_and_identical_false_is_preserved(self):
+        for parser, factory in ((work.parse_question, work_html), (exam.parse_question, exam_html)):
+            for extra in ("false", "FALSE", "true", ""):
+                with self.subTest(parser=parser.__module__, extra=extra):
+                    node = BeautifulSoup(factory(type_value="3", answer="false"), "lxml").div
+                    node.insert(
+                        0,
+                        BeautifulSoup(f'<input name="answer42" value="{extra}">', "html.parser"),
+                    )
+                    if extra.casefold() == "false":
+                        self.assertIs(parser(node).answer, False)
+                    else:
+                        with self.assertRaises(ValueError):
+                            parser(node)
+
     def test_single_choice_exact_unique_and_consistent(self):
         q = question()
         for raw, expected in (
@@ -443,6 +560,63 @@ class RegressionTests(unittest.TestCase):
             with self.subTest(raw=raw):
                 self.assertIsNone(resolver.normalize_answer(q, raw))
 
+    def test_json_objects_and_full_fences_keep_typed_answers(self):
+        q = question()
+        for raw in (
+            {"answer": "A"},
+            {"answers": ["A"]},
+            '```json\n{"answer":"A"}\n```',
+            "```text\n答案：A\n```",
+            '```\n"A"\n```',
+        ):
+            with self.subTest(raw=raw):
+                self.assertEqual(resolver.normalize_answer(q, raw), "A")
+        judgment = question(QuestionType.判断题)
+        for raw in ({"answer": False}, '{"answers":false}', '```json\n{"answer":false}\n```'):
+            with self.subTest(raw=raw):
+                self.assertIs(resolver.normalize_answer(judgment, raw), False)
+        blanks = question(QuestionType.填空题, ["一", "二"])
+        self.assertEqual(resolver.normalize_answer(blanks, {"answers": ["甲", "乙"]}), ["甲", "乙"])
+        multiple = question(QuestionType.多选题)
+        self.assertEqual(resolver.normalize_answer(multiple, {"answers": ["A", "B"]}), "AB")
+
+    def test_thinking_is_removed_only_when_complete_and_leading(self):
+        q = question()
+        for raw in ("<think>推理</think>\n答案：A", '<THINK>推理</THINK>\n```json\n{"answer":"A"}\n```'):
+            with self.subTest(raw=raw):
+                self.assertEqual(resolver.normalize_answer(q, raw), "A")
+        blanks = question(QuestionType.填空题, ["一"])
+        for raw in (
+            "<think>未结束",
+            "<think >未结束",
+            "答案：A<think>推理</think>",
+            "<think><think>推理</think>A",
+            ["<think>未结束"],
+            {"answer": "<think>推理</think>A"},
+        ):
+            with self.subTest(raw=raw):
+                self.assertIsNone(resolver.normalize_answer(q, raw))
+                self.assertIsNone(resolver.normalize_answer(blanks, raw))
+                dto = FakeDto([blanks])
+                instance, _ = self.execute(dto, [raw], fallback_save=False)
+                self.assertEqual(instance.completed_cnt, 0)
+                dto.submit.assert_not_called()
+                dto.final_submit.assert_not_called()
+
+    def test_malformed_wrappers_and_duplicate_fields_cannot_choose_an_answer(self):
+        q = question()
+        for raw in (
+            '{"answer":"A","answer":"B"}',
+            '{"answer":"A","answers":"B"}',
+            {"answer": "A", "答案": "B"},
+            '```json\n{"answer":"A"}',
+            '```json\n{"answer":"A"}\n``` trailing',
+            'prefix ```json\n{"answer":"A"}\n```',
+            '{"answer":"A"} trailing',
+        ):
+            with self.subTest(raw=raw):
+                self.assertIsNone(resolver.normalize_answer(q, raw))
+
     def test_same_line_analysis_is_not_a_blank_answer(self):
         q = question(QuestionType.填空题, ["一"])
         for raw in (
@@ -489,6 +663,21 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(JsonFileSearcher(source).invoke(question()).code, 0)
         source.write_text('{"测试题": "A", "测试题": "B"}', encoding="utf8")
         self.assertNotEqual(JsonFileSearcher(source).invoke(question()).code, 0)
+
+    def test_json_searcher_wrappers_preserve_false_and_reject_duplicate_answer_fields(self):
+        source = self.folder / "bank.json"
+        source.write_text('{"测试题":{"answer":false}}', encoding="utf8")
+        q = question(QuestionType.判断题)
+        result = JsonFileSearcher(source).invoke(q)
+        self.assertIs(resolver.normalize_answer(q, result.answer), False)
+        source.write_text('{"测试题":{"answers":["甲","乙"]}}', encoding="utf8")
+        q = question(QuestionType.填空题, ["一", "二"])
+        self.assertEqual(
+            resolver.normalize_answer(q, JsonFileSearcher(source).invoke(q).answer), ["甲", "乙"]
+        )
+        source.write_text('{"测试题":{"answer":"A","answer":"B"}}', encoding="utf8")
+        q = question()
+        self.assertIsNone(resolver.normalize_answer(q, JsonFileSearcher(source).invoke(q).answer))
 
     def test_existing_valid_answers_skip_search_and_single_submit(self):
         for q in (
